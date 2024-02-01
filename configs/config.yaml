@@ -1,0 +1,32 @@
+device: "cpu"
+
+# Network
+net:
+  n_input: 1
+  n_output: 1
+  n_hidden: 20
+  n_layers: 5
+
+# Optimizer
+opt:
+  n_epochs: 10
+  lr: 1e-3
+  weight_decay: 0.0
+
+  scheduler: "ReduceLROnPlateau"
+  factor: 0.5 
+  patience: 10
+
+
+# Solver for linear advection
+solver:
+  initial_data: "sin_wave" # step, square_wave, sin_wave
+  t_end: 1.
+  velocity: 1.
+  n_cells: 100
+  CFL: 0.5
+
+
+
+
+
