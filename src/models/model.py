@@ -3,9 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class FluxLimiter(nn.Module):
-    def __init__(self, n_input, n_output, n_hidden, n_layers):
+    def __init__(self, n_input, n_output, n_hidden, n_layers, act):
         super().__init__()
-        activation = nn.Tanh
+
+        # Set activation function
+        if act == "ReLU":
+            activation = nn.ReLU
+        elif act == "Tanh":
+            activation = nn.Tanh
+        else:
+            raise ValueError(f"No activation function type: {act}")
+        
         self.start = nn.Sequential(*[
                         nn.Linear(n_input, n_hidden),
                         activation()])

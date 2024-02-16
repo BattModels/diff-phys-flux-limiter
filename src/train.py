@@ -9,6 +9,8 @@ from utils import fvm_solver, utils
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
+import wandb
+
 torch.manual_seed(3407)
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config")
@@ -25,8 +27,12 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         cfg.net.n_output,
         cfg.net.n_hidden,
         cfg.net.n_layers,
+        cfg.net.activation,
     )
-    model.load_state_dict(torch.load("pretrained_model.pt"))
+
+    if cfg.net.with_pretrain:
+        model.load_state_dict(torch.load("pretrained_model.pt"))
+
     model = model.to(device)
 
     model.eval()
@@ -34,7 +40,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         preds = model(torch.linspace(-10, 100, 1000).view(-1,1))
     fig, ax = plt.subplots()
     ax.plot(np.linspace(-10, 100, 1000), preds.cpu())
-    # ax.plot(np.linspace(0, 100, 1000), utils.vanLeer(np.linspace(0, 100, 1000)))
+    ax.plot(np.linspace(0, 100, 1000), utils.vanLeer(np.linspace(0, 100, 1000)))
     fig.savefig('model_before_finetune')
 
     # Optimizer
@@ -69,6 +75,22 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     u0 = torch.Tensor(u0)
     dx = x0[1] - x0[0]
     u_true = u0
+
+    # Initiate wandb
+    wandb.init(
+      # Set the project where this run will be logged
+      project="1D-flux-limiter", 
+      # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+      name=f"linear-adv-backprop only once-{cfg.solver.initial_data}-pretrain?{cfg.net.with_pretrain}-grad_clipping?{cfg.opt.grad_clipping}", 
+      # Track hyperparameters and run metadata
+      config={
+      "learning_rate": cfg.opt.lr,
+      "architecture": "MLP",
+      "dataset": "VanLeer-FOU-LW",
+      "epochs": cfg.opt.n_epochs,
+      })
+    
+    wandb.watch(model, log="all", log_freq=1)
     
     # Begin training
     model.train(True)
@@ -91,32 +113,43 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         loss = nn.MSELoss()(u, u_true)
         optimizer.zero_grad()
         loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+        if cfg.opt.grad_clipping:
+            nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
         scheduler.step(loss.item())
 
-        # wandb.log({"train loss": loss.item()})
+        wandb.log({"train loss": loss.item()})
         print(f"Loss train: {loss.item()}")
+
+        # if (epoch<5):
+        #     print(epoch)
+        #     for name, param in model.named_parameters():
+        #         if param.requires_grad:
+        #             print(name, param)
+        #             print(name, param.grad)
+    
 
     torch.save(model.state_dict(), 'model.pt')
 
-    # for param in model.parameters():
-    #     print(param)
-    
-    #######################
+    ############### EVALUATION ###############
     fig, ax = plt.subplots()
     ax.plot(x0, u0.numpy(),'b')
     ax.plot(x0, u_true.numpy(),'r')
-    fig.savefig('aa')
-
+    fig.savefig('doublecheck_u_true')
 
     model.eval()
+    r_min = -10
+    r_max = 50
+    n_eval = 1000
+    r_eval = np.linspace(r_min, r_max, n_eval)
     with torch.no_grad():
-        preds = model(torch.linspace(-10, 100, 1000).view(-1,1))
+        preds = model(torch.Tensor(r_eval).view(-1,1))
     fig, ax = plt.subplots()
-    ax.plot(np.linspace(-10, 100, 1000), preds.cpu(), '.')
-    ax.plot(np.linspace(-10, 100, 1000), utils.vanLeer(np.linspace(-10, 100, 1000)))
+    ax.plot(r_eval, preds.cpu(), '.')
+    ax.plot(r_eval, utils.vanLeer(r_eval))
     fig.savefig('learned_limiter_linear_case')
+
+    wandb.finish()
 
 if __name__ == "__main__":
     train_neural_flux_limiter()

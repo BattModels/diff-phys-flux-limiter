@@ -6,16 +6,21 @@ net:
   n_output: 1
   n_hidden: 20
   n_layers: 5
+  
+  activation: "Tanh"
+  with_pretrain: True
 
 # Optimizer
 opt:
-  n_epochs: 10
+  n_epochs: 100
   lr: 1e-3
   weight_decay: 0.0
 
   scheduler: "ReduceLROnPlateau"
   factor: 0.5 
   patience: 10
+
+  grad_clipping: False
 
 
 # Solver for linear advection

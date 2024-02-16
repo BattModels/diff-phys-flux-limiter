@@ -115,6 +115,7 @@ def pretrain_flux_limiter(cfg: DictConfig) -> None:
         cfg.net.n_output,
         cfg.net.n_hidden,
         cfg.net.n_layers,
+        cfg.net.activation,
     )
     model = model.to(device)
 
