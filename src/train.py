@@ -58,6 +58,11 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
             patience=cfg.opt.patience,
             mode="min",
         )
+    elif cfg.opt.scheduler == "CosineAnnealingLR":
+         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=cfg.opt.n_epochs,
+        )       
     else:
         raise ValueError(f"No scheduler type: {cfg.opt.scheduler}")
 

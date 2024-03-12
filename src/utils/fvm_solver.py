@@ -90,7 +90,13 @@ def solve_linear_advection_1D(u0, T, a, dx, CFL, flux_limiter):
         
         r = utils.compute_r(u, np.roll(u, 1), np.roll(u, -1)) # r_{i+1/2}
 
+        # FOU
         F_low = 0.5 * (f + np.roll(f, -1)) - 0.5 * np.abs(a) * (np.roll(u, -1) - u)
+
+        # Lax-Friedrichs
+        # F_low = 0.5 * (f + np.roll(f, -1)) - 0.5 * dx/dt * (np.roll(u, -1) - u)
+
+        # Lax-Wendroff
         F_high = f + 0.5 * (1 - CFL) * (np.roll(f, -1) - f)
 
         phi = flux_limiter(r)
@@ -103,7 +109,7 @@ def solve_linear_advection_1D(u0, T, a, dx, CFL, flux_limiter):
     return u, u_all
 
 def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
-    """ Solve the linear advection equation using torch instead of np for the purpose of back propagation
+    """ Solve the linear advection equation using torch instead of numpy for the purpose of back propagation
         \partial{u}/\partial{t} + a \partial{u}/\partial{x} = 0
 
         parameters:

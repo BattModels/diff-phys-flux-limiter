@@ -8,17 +8,17 @@ net:
   n_layers: 5
   
   activation: "Tanh"
-  with_pretrain: True
+  with_pretrain: False
 
 # Optimizer
 opt:
-  n_epochs: 100
+  n_epochs: 8
   lr: 1e-3
   weight_decay: 0.0
 
-  scheduler: "ReduceLROnPlateau"
-  factor: 0.5 
-  patience: 10
+  scheduler: "CosineAnnealingLR" #'ReduceLROnPlateau' or 'CosineAnnealingLR'
+  factor: 0.5      # for ReduceLROnPlateau
+  patience: 10     # for ReduceLROnPlateau
 
   grad_clipping: False
 
@@ -26,7 +26,7 @@ opt:
 # Solver for linear advection
 solver:
   initial_data: "sin_wave" # step, square_wave, sin_wave
-  t_end: 1.
+  t_end: 10.
   velocity: 1.
   n_cells: 100
   CFL: 0.5
