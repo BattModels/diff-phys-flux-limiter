@@ -1,4 +1,5 @@
 device: "cpu"
+training_type: "use_data" #or "solver_in_the_loop"
 
 # Network
 net:
@@ -22,7 +23,6 @@ opt:
 
   grad_clipping: False
 
-
 # Solver for linear advection
 solver:
   initial_data: "sin_wave" # step, square_wave, sin_wave
@@ -31,6 +31,15 @@ solver:
   n_cells: 100
   CFL: 0.5
 
+data:
+  folder: '~/research/flux_limiter/data/'
+  filename: '1D_Advection_Sols_beta1.0.hdf5'
+  batch_size: 50
+  n_train: 900
+  test_batch_sizes: 50
+  n_tests: 100
+  spatial_length: 1024
+  temporal_length: 201
 
 
 
