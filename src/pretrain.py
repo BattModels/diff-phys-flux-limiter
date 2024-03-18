@@ -104,7 +104,7 @@ def eval_model(model, dataset, device):
         preds = model(dataset.data.to(device))
     return preds
 
-@hydra.main(version_base="1.3", config_path="../configs", config_name="config")
+@hydra.main(version_base="1.3", config_path="../configs", config_name="config_pretrain")
 def pretrain_flux_limiter(cfg: DictConfig) -> None:
     # Setup device
     device = cfg.device
@@ -143,11 +143,10 @@ def pretrain_flux_limiter(cfg: DictConfig) -> None:
     train_data_loader = data.DataLoader(train_dataset, batch_size=64, shuffle=True)
     validation_data_loader = data.DataLoader(validation_dataset, batch_size=16, shuffle=True)
 
-    EPOCHS = 1500
     train_loss_his = []
     val_loss_his = []
 
-    for epoch in range(EPOCHS):
+    for epoch in range(cfg.opt.n_epochs):
         print('EPOCH {}:'.format(epoch))
 
         # Make sure gradient tracking is on, and do a pass over the data

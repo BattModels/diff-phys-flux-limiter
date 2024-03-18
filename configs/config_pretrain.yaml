@@ -1,0 +1,20 @@
+device: "cpu"
+
+# Network
+net:
+  n_input: 1
+  n_output: 1
+  n_hidden: 20
+  n_layers: 5
+  
+  activation: "Tanh"
+
+# Optimizer
+opt:
+  n_epochs: 1500
+  lr: 1e-3
+  weight_decay: 0.0
+
+  scheduler: "ReduceLROnPlateau" #'ReduceLROnPlateau' or 'CosineAnnealingLR'
+  factor: 0.5      # for ReduceLROnPlateau only
+  patience: 10     # for ReduceLROnPlateau only

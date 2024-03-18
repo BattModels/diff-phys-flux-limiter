@@ -1,5 +1,5 @@
 device: "cpu"
-training_type: "use_data" #or "solver_in_the_loop"
+training_type: "single_step" #or "solver_in_the_loop"
 
 # Network
 net:
@@ -13,13 +13,13 @@ net:
 
 # Optimizer
 opt:
-  n_epochs: 8
+  n_epochs: 20
   lr: 1e-3
   weight_decay: 0.0
 
-  scheduler: "CosineAnnealingLR" #'ReduceLROnPlateau' or 'CosineAnnealingLR'
-  factor: 0.5      # for ReduceLROnPlateau
-  patience: 10     # for ReduceLROnPlateau
+  scheduler: "ReduceLROnPlateau" #'ReduceLROnPlateau' or 'CosineAnnealingLR'
+  factor: 0.5      # for ReduceLROnPlateau only
+  patience: 10     # for ReduceLROnPlateau only
 
   grad_clipping: False
 
@@ -36,10 +36,13 @@ data:
   filename: '1D_Advection_Sols_beta1.0.hdf5'
   batch_size: 50
   n_train: 900
-  test_batch_sizes: 50
-  n_tests: 100
+  test_batch_size: 50
+  n_test: 100
   spatial_length: 1024
   temporal_length: 201
+
+wandb:
+  log: False
 
 
 
