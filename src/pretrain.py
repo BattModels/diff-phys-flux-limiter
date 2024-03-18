@@ -30,7 +30,11 @@ class Dataset(data.Dataset):
     def generate_data(self):
         data = self.start + (self.end - self.start) * torch.rand(self.size)
         data = data.view(-1, 1)
-        label = self.f(data)
+        _label = self.f(data)
+        if not isinstance(_label, torch.Tensor):
+            label = torch.from_numpy(_label)
+        else:
+            label = _label
 
         self.data = data
         self.label = label
