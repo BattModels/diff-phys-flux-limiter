@@ -1,7 +1,8 @@
 import os
 import h5py
-import numpy as np
 import torch
+import numpy as np
+import matplotlib.pyplot as plt
 torch.manual_seed(3407)
 
 from omegaconf import DictConfig, OmegaConf
@@ -86,6 +87,12 @@ class LinearAdvDataset1D(torch.utils.data.Dataset):
         HF = self.HF[idx]
         cur_state = self.data[idx]
         return r, label, LF, HF, cur_state
+    
+    def plot_r_dist(self, bins, range):
+        fig, ax = plt.subplots()
+        r_np = self.r.numpy().reshape((-1,1))
+        ax.hist(r_np,bins=bins,range=range)
+        return fig, ax
 
 def load_1d_adv_data_from_h5_file(cfg):
     # For 1d linear advection data, dt = 0.01, dx = 1/1024, grid points are
