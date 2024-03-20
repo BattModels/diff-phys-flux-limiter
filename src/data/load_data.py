@@ -88,7 +88,7 @@ class LinearAdvDataset1D(torch.utils.data.Dataset):
         cur_state = self.data[idx]
         return r, label, LF, HF, cur_state
     
-    def plot_r_dist(self, bins, range):
+    def plot_r_dist(self, bins, range=None):
         fig, ax = plt.subplots()
         r_np = self.r.numpy().reshape((-1,1))
         ax.hist(r_np,bins=bins,range=range)
@@ -101,10 +101,10 @@ def load_1d_adv_data_from_h5_file(cfg):
 
     path = cfg.data.folder
     path = os.path.expanduser(path)
-    # Read the h5 file and store the data
     flnm = cfg.data.filename
     assert os.path.isfile(path + flnm), 'no such file! ' + path + flnm
 
+    # Read the h5 file and store the data
     # data.shape: (batch, t, x) = (10000, 201, 1024)
     with h5py.File(os.path.join(path, flnm), "r") as h5_file:
         xcrd = np.array(h5_file["x-coordinate"], dtype=np.float32)
@@ -148,7 +148,6 @@ def load_1d_adv_data_from_h5_file(cfg):
 def load_1d_adv_data(cfg):
     path = cfg.data.folder
     path = os.path.expanduser(path)
-    # Read the h5 file and store the data
     flnm = 'sim_data.pt'
     sim_data = torch.load(os.path.join(path, flnm))
 
@@ -159,11 +158,38 @@ def load_1d_adv_data(cfg):
     validation_db = LinearAdvDataset1D(sim_data, cfg.solver.velocity, dx, CFL*dx/cfg.solver.velocity, istart=cfg.data.n_train, Ns=cfg.data.n_test, Nt=1)
     validation_loader = torch.utils.data.DataLoader(validation_db, batch_size=cfg.data.test_batch_size, shuffle=True)
 
+    # Plot the histogram of r
+    # fig, ax = train_db.plot_r_dist(bins=list(range(0,11)))
+    # ax.set_xlabel("r")
+    # ax.set_ylabel("counts")
+    # fig.savefig("r_histogram")
+
+    return train_db, train_loader, validation_db, validation_loader
+
+def load_1d_rand_adv_data(cfg):
+    path = cfg.data.folder
+    path = os.path.expanduser(path)
+    flnm = 'sim_data_random.pt'
+    sim_data = torch.load(os.path.join(path, flnm))
+
+    dx = 1./1024
+    CFL = 1.
+    train_db = LinearAdvDataset1D(sim_data, cfg.solver.velocity, dx, CFL*dx/cfg.solver.velocity, istart=0, Ns=cfg.data.n_train, Nt=1)
+    train_loader = torch.utils.data.DataLoader(train_db, batch_size=cfg.data.batch_size, shuffle=True)
+    validation_db = LinearAdvDataset1D(sim_data, cfg.solver.velocity, dx, CFL*dx/cfg.solver.velocity, istart=cfg.data.n_train, Ns=cfg.data.n_test, Nt=1)
+    validation_loader = torch.utils.data.DataLoader(validation_db, batch_size=cfg.data.test_batch_size, shuffle=True)
+
+    # Plot the histogram of r
+    # fig, ax = train_db.plot_r_dist(bins=np.arange(0,10,0.1))
+    # ax.set_xlabel("r")
+    # ax.set_ylabel("counts")
+    # fig.savefig("r_histogram_random")
+
     return train_db, train_loader, validation_db, validation_loader
 
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    load_1d_adv_data(cfg)
+    load_1d_rand_adv_data(cfg)
 
 if __name__ == "__main__":
     main()
