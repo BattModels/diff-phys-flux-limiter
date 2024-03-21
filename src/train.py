@@ -119,10 +119,10 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Plot the flux limiter before training
     model.eval()
     with torch.no_grad():
-        preds = model(torch.linspace(-10, 100, 1000).view(-1,1))
+        preds = model(torch.linspace(-10, 50, 1000).view(-1,1))
     fig, ax = plt.subplots()
-    ax.plot(np.linspace(-10, 100, 1000), preds.cpu())
-    ax.plot(np.linspace(0, 100, 1000), utils.vanLeer(np.linspace(0, 100, 1000)))
+    ax.plot(np.linspace(-10, 50, 1000), preds.cpu())
+    ax.plot(np.linspace(0, 50, 1000), utils.vanLeer(np.linspace(0, 50, 1000)))
     fig.savefig('model_before_finetune')
 
     # Optimizer
@@ -253,8 +253,9 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     with torch.no_grad():
         preds = model(torch.Tensor(r_eval).view(-1,1))
     fig, ax = plt.subplots()
-    ax.plot(r_eval, preds.cpu(), '.')
-    ax.plot(r_eval, utils.vanLeer(r_eval))
+    ax.plot(r_eval, preds.cpu(), '.', label="neural flux limiter")
+    ax.plot(r_eval, utils.vanLeer(r_eval), label="van Leer")
+    ax.legend()
     fig.savefig('learned_limiter_linear_case')
 
     if cfg.wandb.log:
