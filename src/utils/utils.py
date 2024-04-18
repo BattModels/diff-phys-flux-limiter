@@ -18,14 +18,22 @@ def LaxWendroff(r):
 
 def compute_r(u, ul, ur):
     r = (u - ul) / (ur - u)
-    r = np.where(np.isnan(r), 1e6, r)
-    r = np.where(np.isinf(r), 1e6, r)
+    # r = np.where(np.isnan(r), 1e6, r)
+    # r = np.where(np.isinf(r), 1e6, r)
+
+    # In case that ur - u accidentally equals to -eps so we use rand
+    eps = np.random.rand(1)*1e-16 
+    r = (u - ul) / (ur - u + eps)
     return r
 
 def compute_r_torch(u, ul, ur):
     r = (u - ul) / (ur - u)
-    r = torch.where(torch.isnan(r), 1e6, r)
-    r = torch.where(torch.isinf(r), 1e6, r)
+    # r = torch.where(torch.isnan(r), 1e6, r)
+    # r = torch.where(torch.isinf(r), 1e6, r)
+
+    # In case that ur - u accidentally equals to -eps so we use rand
+    eps = torch.rand(1).item()*1e-16 
+    r = (u - ul) / (ur - u + eps)
     return r
 
 def sin_wave(N=1000, L=1):
