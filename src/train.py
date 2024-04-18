@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from models.model import FluxLimiter
 from utils import fvm_solver, utils
-from data.load_data import load_1d_adv_data
+from data.load_data import load_1d_adv_data, load_1d_adv_data_with_uniform_r
 
 from omegaconf import DictConfig, OmegaConf
 import hydra
@@ -14,6 +14,85 @@ import wandb
 
 torch.manual_seed(3407)
 
+def train_one_epoch_uniform_r(model, optimizer, train_db, train_data_loader, device):
+    loss = 0.
+    running_loss = 0.
+
+    for i, data in enumerate(train_data_loader):
+        r, labels, LF, HF, cur_state = data
+
+        r_l = r[:,0].view(-1,1)
+        r_r = r[:,1].view(-1,1)
+        labels = labels[:,1].view(-1,1)
+        LF_l = LF[:,0].view(-1,1)
+        HF_l = HF[:,0].view(-1,1)
+        LF_r = LF[:,1].view(-1,1)
+        HF_r = HF[:,1].view(-1,1)
+        cur_state = cur_state[:,1].view(-1,1)
+
+        r_l = r_l.to(device)
+        r_r = r_r.to(device)
+        labels = labels.to(device)
+        LF_l = LF_l.to(device)
+        HF_l = HF_l.to(device)
+        LF_r = LF_r.to(device)
+        HF_r = HF_r.to(device)
+        cur_state = cur_state.to(device)
+
+        phi_l = model(r_l)
+        phi_r = model(r_r)
+        F_l = (1 - phi_l) * LF_l + phi_l * HF_l
+        F_r = (1 - phi_r) * LF_r + phi_r * HF_r
+        preds = cur_state - train_db.dt/train_db.dx * (F_r - F_l)
+
+        loss = nn.MSELoss()(preds, labels)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        running_loss += loss.item()
+
+    # return element-wise error
+    return running_loss / (i+1)
+
+def validate_one_epoch_uniform_r(model, validation_db, validation_data_loader, device):
+    running_vloss = 0.
+
+    model.eval()
+
+    # Disable gradient computation and reduce memory consumption.
+    with torch.no_grad():
+        for i, vdata in enumerate(validation_data_loader):
+            r, labels, LF, HF, cur_state = vdata
+
+            r_l = r[:,0].view(-1,1)
+            r_r = r[:,1].view(-1,1)
+            labels = labels[:,1].view(-1,1)
+            LF_l = LF[:,0].view(-1,1)
+            HF_l = HF[:,0].view(-1,1)
+            LF_r = LF[:,1].view(-1,1)
+            HF_r = HF[:,1].view(-1,1)
+            cur_state = cur_state[:,1].view(-1,1)
+
+            r_l = r_l.to(device)
+            r_r = r_r.to(device)
+            labels = labels.to(device)
+            LF_l = LF_l.to(device)
+            HF_l = HF_l.to(device)
+            LF_r = LF_r.to(device)
+            HF_r = HF_r.to(device)
+            cur_state = cur_state.to(device)
+
+            phi_l = model(r_l)
+            phi_r = model(r_r)
+            F_l = (1 - phi_l) * LF_l + phi_l * HF_l
+            F_r = (1 - phi_r) * LF_r + phi_r * HF_r
+            preds = cur_state - validation_db.dt/validation_db.dx * (F_r - F_l)
+
+            vloss = nn.MSELoss()(preds, labels)
+            running_vloss += vloss.item()
+
+    return running_vloss / (i+1)
+    
 def train_one_epoch(model, optimizer, train_db, train_data_loader, device):
     loss = 0.
     running_loss = 0.
@@ -28,7 +107,7 @@ def train_one_epoch(model, optimizer, train_db, train_data_loader, device):
         cur_state = cur_state.to(device)
 
         phi = model(r.view(-1,1))
-        phi = phi.view(labels.shape[0], labels.shape[1])
+        phi = phi.view(labels.shape[0], -1)
         F = (1 - phi) * LF + phi * HF
         preds = cur_state - train_db.dt/train_db.dx * (F - torch.roll(F, 1, 1))
 
@@ -58,7 +137,7 @@ def validate_one_epoch(model, validation_db, validation_data_loader, device):
             cur_state = cur_state.to(device)
 
             phi = model(r.view(-1,1))
-            phi = phi.view(labels.shape[0], labels.shape[1])
+            phi = phi.view(labels.shape[0], -1)
             F = (1 - phi) * LF + phi * HF
             preds = cur_state - validation_db.dt/validation_db.dx * (F - torch.roll(F, 1, 1))
 
@@ -202,7 +281,8 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
             #             print(name, param.grad)
     
     else: # training_type == "single_step"
-        train_db, train_loader, validation_db, validation_loader = load_1d_adv_data(cfg)
+        # train_db, train_loader, validation_db, validation_loader = load_1d_adv_data(cfg)
+        train_db, train_loader, validation_db, validation_loader = load_1d_adv_data_with_uniform_r(cfg)
 
         # Begin training
         model.train(True)
@@ -214,7 +294,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
 
             # Make sure gradient tracking is on, and do a pass over the data
             model.train(True)
-            train_loss = train_one_epoch(
+            train_loss = train_one_epoch_uniform_r(
                 model=model,
                 optimizer=optimizer,
                 train_db=train_db,
@@ -222,7 +302,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 device=device,
                 )
 
-            vloss = validate_one_epoch(
+            vloss = validate_one_epoch_uniform_r(
                 model=model,
                 validation_db=validation_db,
                 validation_data_loader=validation_loader,

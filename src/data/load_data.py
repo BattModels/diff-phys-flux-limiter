@@ -8,6 +8,8 @@ torch.manual_seed(3407)
 from omegaconf import DictConfig, OmegaConf
 import hydra
 
+from .gen_data import gen_1d_adv_data_with_uniform_r
+
 class LinearAdvDataset1D(torch.utils.data.Dataset):
     def __init__(self, sim_data, a, dx, dt, istart, Ns, Nt):
         """
@@ -192,9 +194,29 @@ def load_1d_rand_adv_data(cfg):
 
     return train_db, train_loader, validation_db, validation_loader
 
+def load_1d_adv_data_with_uniform_r(cfg):
+    sim_data = gen_1d_adv_data_with_uniform_r(r_end=10., a=cfg.solver.velocity, dx=1./1024, CFL=cfg.solver.CFL, Ns=cfg.data.n_train+cfg.data.n_test)
+
+    dx = 1./1024
+    CFL = cfg.solver.CFL
+    train_db = LinearAdvDataset1D(sim_data, cfg.solver.velocity, dx, CFL*dx/cfg.solver.velocity, istart=0, Ns=cfg.data.n_train, Nt=1)
+    train_loader = torch.utils.data.DataLoader(train_db, batch_size=cfg.data.batch_size, shuffle=True)
+    validation_db = LinearAdvDataset1D(sim_data, cfg.solver.velocity, dx, CFL*dx/cfg.solver.velocity, istart=cfg.data.n_train, Ns=cfg.data.n_test, Nt=1)
+    validation_loader = torch.utils.data.DataLoader(validation_db, batch_size=cfg.data.test_batch_size, shuffle=True)
+
+    # Plot the histogram of r
+    fig, ax = train_db.plot_r_dist(bins=np.arange(0,10,0.1))
+    ax.set_xlabel("r")
+    ax.set_ylabel("counts")
+    fig.savefig("r_histogram_uniform")
+
+    return train_db, train_loader, validation_db, validation_loader
+
 @hydra.main(version_base="1.3", config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    load_1d_adv_data(cfg)
+    # load_1d_adv_data(cfg)
+    load_1d_adv_data_with_uniform_r(cfg)
 
 if __name__ == "__main__":
     main()
+    

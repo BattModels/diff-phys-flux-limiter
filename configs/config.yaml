@@ -13,7 +13,7 @@ net:
 
 # Optimizer
 opt:
-  n_epochs: 20
+  n_epochs: 150
   lr: 1e-3
   weight_decay: 0.0
 
@@ -29,17 +29,20 @@ solver:
   t_end: 10.
   velocity: 1.
   n_cells: 100
-  CFL: 0.5
+  CFL: 0.4
 
 data:
   folder: '~/research/flux_limiter/data/'
-  filename: '1D_Advection_Sols_beta1.0.hdf5'
+  filename: '1D_Advection_Sols_beta1.0_single_step.npy'
   batch_size: 50
-  n_train: 900
+  n_train: 9000
   test_batch_size: 50
-  n_test: 100
+  n_test: 1000
   spatial_length: 1024
-  temporal_length: 201
+  temporal_length: 2
+  xL: 0.
+  xR: 1.
+  dt: 3.90625e-4
 
 wandb:
   log: False
