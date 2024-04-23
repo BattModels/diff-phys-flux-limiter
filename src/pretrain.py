@@ -142,8 +142,8 @@ def pretrain_flux_limiter(cfg: DictConfig) -> None:
         raise ValueError(f"No scheduler type: {cfg.opt.scheduler}")
 
     # Dataset
-    train_dataset = Dataset(utils.vanLeer, start=0, end=100, size=4096)
-    validation_dataset = Dataset(utils.vanLeer, start=0, end=100, size=256)
+    train_dataset = Dataset(utils.vanLeer, start=0, end=10, size=4096)
+    validation_dataset = Dataset(utils.vanLeer, start=0, end=10, size=256)
     train_data_loader = data.DataLoader(train_dataset, batch_size=64, shuffle=True)
     validation_data_loader = data.DataLoader(validation_dataset, batch_size=16, shuffle=True)
 
