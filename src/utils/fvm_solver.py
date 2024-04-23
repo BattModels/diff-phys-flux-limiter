@@ -127,20 +127,20 @@ def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
     for i in range(n_timesteps):
         f = a * u
         
-        # r: 1d tensor
-        r = utils.compute_r_torch(u, torch.roll(u, 1), torch.roll(u, -1)) # r_{i+1/2}
+        # Roll along the last dimension of the tensor
+        dim = u.dim() - 1
 
-        F_low = 0.5 * (f + torch.roll(f, -1)) - 0.5 * abs(a) * (torch.roll(u, -1) - u)
-        F_high = f + 0.5 * (1 - CFL) * (torch.roll(f, -1) - f)
+        r = utils.compute_r_torch(u, torch.roll(u, 1, dim), torch.roll(u, -1, dim)) # r_{i+1/2}
 
-        # phi: 2d tensor
+        F_low = 0.5 * (f + torch.roll(f, -1, dim)) - 0.5 * abs(a) * (torch.roll(u, -1, dim) - u)
+        F_high = f + 0.5 * (1 - CFL) * (torch.roll(f, -1, dim) - f)
+
         phi = model(r.view(-1, 1))
-        # phi: 1d tensor
-        phi = phi.squeeze()
+        phi = phi.view(u.shape)
 
         F = (1 - phi) * F_low + phi * F_high 
 
-        u -= dt/dx * (F - torch.roll(F, 1))
+        u -= dt/dx * (F - torch.roll(F, 1, dim))
 
         # u_all[i+1] = u.copy() 
 
