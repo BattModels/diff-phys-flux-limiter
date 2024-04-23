@@ -17,7 +17,7 @@ def LaxWendroff(r):
     return np.ones_like(r)
 
 def compute_r(u, ul, ur):
-    r = (u - ul) / (ur - u)
+    # r = (u - ul) / (ur - u)
     # r = np.where(np.isnan(r), 1e6, r)
     # r = np.where(np.isinf(r), 1e6, r)
 
@@ -27,7 +27,7 @@ def compute_r(u, ul, ur):
     return r
 
 def compute_r_torch(u, ul, ur):
-    r = (u - ul) / (ur - u)
+    # r = (u - ul) / (ur - u)
     # r = torch.where(torch.isnan(r), 1e6, r)
     # r = torch.where(torch.isinf(r), 1e6, r)
 
