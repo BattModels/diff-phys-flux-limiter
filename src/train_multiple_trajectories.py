@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import numpy as np
@@ -5,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from models.model import FluxLimiter
 from utils import fvm_solver, utils
-from data.load_data import load_1d_adv_data, load_1d_adv_data_with_uniform_r
+from data.linear_adv_dataset import load_linear_adv_1d
 
 from omegaconf import DictConfig, OmegaConf
 import hydra
@@ -42,11 +43,11 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     if cfg.wandb.log:
         wandb.init(
             project="1D-flux-limiter-linear-adv", 
-            name=f"{cfg.training_type}-{cfg.solver.initial_data}-pretrain?{cfg.net.with_pretrain}-grad_clipping?{cfg.opt.grad_clipping}", 
+            name=f"{cfg.training_type}-pretrain?{cfg.net.with_pretrain}-{cfg.data.CG}xCG-grad_clipping?{cfg.opt.grad_clipping}", 
             config={
             "learning_rate": cfg.opt.lr,
             "architecture": "MLP",
-            "dataset": cfg.solver.initial_data,
+            "dataset": cfg.data.filename,
             "epochs": cfg.opt.n_epochs,
             })    
 
@@ -100,51 +101,38 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     else:
         raise ValueError(f"No scheduler type: {cfg.opt.scheduler}")
     
-    # Shape: [10000,2,1024], the second row is useless (the simulation data after one step)
-    sim_data = torch.load("./data/sim_data.pt")
+    # Load data
+    path = cfg.data.folder
+    path = os.path.expanduser(path)
+    flnm = cfg.data.filename
+    path = os.path.join(path, flnm)
+    train_loader, test_loader = load_linear_adv_1d(
+        path=path,
+        n_train=cfg.data.n_train,
+        n_test=cfg.data.n_test,
+        train_batch_size=cfg.data.batch_size,
+        test_batch_size=cfg.data.test_batch_size,
+        )
 
-    # Coarse graining to make sure that the number of timesteps are not too big to make it hard for backpropagation 
-    cg = 8
-    dx = (cfg.data.xR - cfg.data.xL) / (cfg.data.spatial_length / cg)
-    sim_data = sim_data[:,:,::cg]
-
-    # Shift the initial conditions right to get the true solutions
-    n_shift = 16
-    sim_data[:,1,:] = torch.roll(sim_data[:,0,:], n_shift, 1)
-
-    n_train = cfg.data.n_train
-    n_test = cfg.data.n_test
-
-    train_data = sim_data[:n_train,:,:].to(device)
-    test_data = sim_data[n_train:n_train+n_test,:,:].to(device)
-
+    # Train and evaluate
     for epoch in range(cfg.opt.n_epochs):
         print('Epoch {}:'.format(epoch))
 
         # Begin training
         model.train(True)
 
-        # Shuffle
-        perm = torch.randperm(train_data.shape[0])
-
         total_train_loss = 0.
-        for ibatch in range(cfg.data.n_train//cfg.data.batch_size):
+        for ibatch, sample in enumerate(train_loader):
             # Solve for the state at the end of time T
-            u0 = train_data[perm[(ibatch*cfg.data.batch_size):((ibatch+1)*cfg.data.batch_size)],0,:]
-
             u = fvm_solver.solve_linear_advection_1D_torch(
-                u0=u0,
-                # T=cfg.solver.t_end,
-                T=n_shift/sim_data.shape[2],
-                a=cfg.solver.velocity,
-                dx=dx,
-                CFL=cfg.solver.CFL,
+                u0=sample['x'].to(device),
+                T=cfg.data.t_end,
+                a=cfg.data.velocity,
+                dx=(cfg.data.xR - cfg.data.xL) / (cfg.data.spatial_length / cfg.data.CG),
+                CFL=cfg.data.CFL,
                 model=model)
-            
 
-            u_true = train_data[perm[(ibatch*cfg.data.batch_size):((ibatch+1)*cfg.data.batch_size)],1,:]
-
-            loss = nn.MSELoss()(u, u_true)
+            loss = nn.MSELoss()(u, sample['y'])
             print(f"train batch loss {ibatch}: {loss.item()}")
 
             optimizer.zero_grad()
@@ -164,29 +152,20 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         print(f"Loss train: {total_train_loss}")
 
         # Validation
-
-        # Shuffle
-        perm = torch.randperm(test_data.shape[0])
-
         total_valid_loss = 0.
         model.eval()
-
         with torch.no_grad():
-            for ibatch in range(cfg.data.n_test//cfg.data.test_batch_size):
+            for ibatch, sample in enumerate(test_loader):
                 # Solve for the state at the end of time T
-                u0 = test_data[perm[(ibatch*cfg.data.test_batch_size):((ibatch+1)*cfg.data.test_batch_size)],0,:]
-
                 u = fvm_solver.solve_linear_advection_1D_torch(
-                    u0=u0,
-                    # T=cfg.solver.t_end,
-                    T=n_shift/sim_data.shape[2],
-                    a=cfg.solver.velocity,
-                    dx=dx,
-                    CFL=cfg.solver.CFL,
+                    u0=sample['x'].to(device),
+                    T=cfg.data.t_end,
+                    a=cfg.data.velocity,
+                    dx=(cfg.data.xR - cfg.data.xL) / (cfg.data.spatial_length / cfg.data.CG),
+                    CFL=cfg.data.CFL,
                     model=model)
                 
-                u_true = test_data[perm[(ibatch*cfg.data.batch_size):((ibatch+1)*cfg.data.batch_size)],1,:]
-                loss = nn.MSELoss()(u, u_true)
+                loss = nn.MSELoss()(u, sample['y'])
                 print(f"valid batch loss {ibatch}: {loss.item()}")
 
                 total_valid_loss += loss.item()
@@ -201,7 +180,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                         "valid loss": total_valid_loss,
                         "learning rate": scheduler.optimizer.param_groups[0]['lr']})
 
-        if (epoch % cfg.opt.n_checkpoint == 0):
+        if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs):
             save_checkpoint(model)
 
     if cfg.wandb.log:

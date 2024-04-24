@@ -119,8 +119,8 @@ def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
     dt = CFL * dx / a
     n_timesteps = int(T/dt)
 
-    # u_all = np.zeros((n_timesteps+1, u0.shape[0]))
-    # u_all[0] = u0.copy()
+    # Need to fix when u0 is 1d tensor
+    u_all = torch.zeros((u0.shape[0], n_timesteps, u0.shape[1]))
 
     u = torch.clone(u0)
 
@@ -142,7 +142,7 @@ def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
 
         u -= dt/dx * (F - torch.roll(F, 1, dim))
 
-        # u_all[i+1] = u.copy() 
+        u_all[:,i,:] = torch.clone(u)
 
     # return u, u_all
-    return u
+    return u_all
