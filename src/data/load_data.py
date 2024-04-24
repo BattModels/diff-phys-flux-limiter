@@ -96,6 +96,11 @@ class LinearAdvDataset1D(torch.utils.data.Dataset):
         ax.hist(r_np,bins=bins,range=range)
         return fig, ax
 
+# The idea of this implemetation is to shift the initial condition one cell to the right,
+# then do simulation for one timestep using CFL = 1 so that we can calculate the MSE loss.
+# It does not work because when CFL = 1, the scheme degrades to FOU so there is no phi(r)
+# involved in the scheme anymore. Thus, the gradients of the loss w.r.t the parameters in 
+# the neural network would always be 0.
 def load_1d_adv_data_from_h5_file(cfg):
     # For 1d linear advection data, dt = 0.01, dx = 1/1024, grid points are
     # placed at the centers of 1024 cells which divide the interval [0,1] equally
@@ -147,6 +152,10 @@ def load_1d_adv_data_from_h5_file(cfg):
 
     return train_db, train_loader, validation_db, validation_loader
 
+# This ".pt" case in this function is used to save loading time for "load_1d_adv_data_from_h5_file".
+# For the "np.load" case, we load npy file (1D_Advection_Sols_beta1.0_single_step.npy). The shape is [10000,2,1024],
+# dt = 3.90625e-4. We modify the CFL number to 0.4 (smaller than 1). The learned flux limiter is not satisfactory.
+# It turns out that the loss function is very small (1e-9), not sure whether this would influence the results.
 def load_1d_adv_data(cfg):
     path = cfg.data.folder
     path = os.path.expanduser(path)
