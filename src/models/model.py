@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import utils
+
 class FluxLimiter(nn.Module):
     def __init__(self, n_input, n_output, n_hidden, n_layers, act):
         super().__init__()
@@ -27,10 +29,8 @@ class FluxLimiter(nn.Module):
         phi = self.start(r)
         phi = self.hidden(phi)
         phi = self.end(phi)
-        
-        # Exert hard contraints
-        phi = (r - 1) * phi + 1
-        phi = F.relu(phi)
-        phi = torch.where(r <= 0, torch.zeros_like(phi), phi)
+
+        phi = F.sigmoid(phi)
+        phi = (1 - phi) * utils.minmod_torch(r) + phi * utils.superbee_torch(r)
 
         return phi
