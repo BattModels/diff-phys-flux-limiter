@@ -42,8 +42,8 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Initiate wandb
     if cfg.wandb.log:
         wandb.init(
-            project="1D-flux-limiter-linear-adv", 
-            name=f"{cfg.training_type}-pretrain?{cfg.net.with_pretrain}-{cfg.data.CG}xCG-grad_clipping?{cfg.opt.grad_clipping}", 
+            project="1D-tvd-flux-limiter-linear-adv", 
+            name=f"{cfg.training_type}-{cfg.data.CG}xCG", 
             config={
             "learning_rate": cfg.opt.lr,
             "architecture": "MLP",
@@ -133,6 +133,15 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 model=model)
 
             loss = nn.MSELoss()(u, sample['y'])
+            # loss = torch.sum(torch.minimum(100*(w-1)**2+1,torch.tensor([1000.])) * (u - sample['y'])**2)/(torch.numel(u))
+            # Soft constraint for symmetry
+            # r = torch.linspace(1e-3,10,1000)
+            # r = r.view(-1,1)
+            # phi_r = model(r)
+            # phi_1_r = model(1/r)
+            # loss_sym = nn.MSELoss()(phi_r,r*phi_1_r)
+            # loss += loss_sym
+            # print(loss.item()-loss_sym.item(),loss_sym.item())
             print(f"train batch loss {ibatch}: {loss.item()}")
 
             optimizer.zero_grad()
@@ -166,18 +175,43 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                     model=model)
                 
                 loss = nn.MSELoss()(u, sample['y'])
+                # loss = torch.sum(torch.minimum(100*(w-1)**2+1,torch.tensor([1000.])) * (u - sample['y'])**2)/(torch.numel(u))
+                # Soft constraint for symmetry
+                # r = torch.linspace(1e-3,10,1000)
+                # r = r.view(-1,1)
+                # phi_r = model(r)
+                # phi_1_r = model(1/r)
+                # loss_sym = nn.MSELoss()(phi_r,r*phi_1_r)
+                # loss += loss_sym
                 print(f"valid batch loss {ibatch}: {loss.item()}")
 
                 total_valid_loss += loss.item()
 
             total_valid_loss = total_valid_loss/(ibatch+1)
             print(f"Loss valid: {total_valid_loss}")
+
+            # The second validation dataset
+            u0 = torch.zeros(5,128)
+            for i in range(5):
+                _, ini_state = utils.ramp(i+1,N=128)
+                u0[i] = torch.Tensor(ini_state)
+
+            u = fvm_solver.solve_linear_advection_1D_torch(
+                u0=u0,
+                T=5,
+                a=cfg.data.velocity,
+                dx=1./128,
+                CFL=cfg.data.CFL,
+                model=model)
+            total_valid_loss_2 = nn.MSELoss()(u[:,-1,:], u0).item()
+            print(f"Loss valid 2: {total_valid_loss_2}")
             
         scheduler.step(total_valid_loss)
 
         if cfg.wandb.log:
             wandb.log({"train loss": total_train_loss,
                         "valid loss": total_valid_loss,
+                        "valid loss 2": total_valid_loss_2,
                         "learning rate": scheduler.optimizer.param_groups[0]['lr']})
 
         if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs):
