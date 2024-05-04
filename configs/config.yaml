@@ -1,11 +1,11 @@
 device: "cpu"
-training_type: "single_step" #or "solver_in_the_loop"
+training_type: "solver in the loop" # "single step" or "solver in the loop"
 
 # Network
 net:
   n_input: 1
   n_output: 1
-  n_hidden: 20
+  n_hidden: 64
   n_layers: 5
   
   activation: "Tanh"
@@ -13,7 +13,7 @@ net:
 
 # Optimizer
 opt:
-  n_epochs: 150
+  n_epochs: 200
   lr: 1e-3
   weight_decay: 0.0
 
@@ -22,30 +22,37 @@ opt:
   patience: 10     # for ReduceLROnPlateau only
 
   grad_clipping: False
+  n_checkpoint: 1
 
 # Solver for linear advection
 solver:
   initial_data: "sin_wave" # step, square_wave, sin_wave
-  t_end: 10.
+  t_end: 1.
   velocity: 1.
   n_cells: 100
   CFL: 0.4
 
 data:
   folder: '~/research/flux_limiter/data/'
-  filename: '1D_Advection_Sols_beta1.0_single_step.npy'
-  batch_size: 50
-  n_train: 9000
-  test_batch_size: 50
-  n_test: 1000
+  filename: '1D_linear_adv_beta1.0_8xCG.pt'
+  batch_size: 128
+  n_train: 1280
+  test_batch_size: 64
+  n_test: 256
+
   spatial_length: 1024
-  temporal_length: 2
+  temporal_length: 320
+  CG: 8
+
   xL: 0.
   xR: 1.
   dt: 3.90625e-4
+  t_end: 0.125
+  velocity: 1.
+  CFL: 0.4
 
 wandb:
-  log: False
+  log: True
 
 
 
