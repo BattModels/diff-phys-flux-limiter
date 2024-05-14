@@ -10,12 +10,12 @@ def analytic_flux_burgers(u):
 def solve_burgers_1D(u0, T, dx, CFL, flux_limiter, nu=0.01):
     u = u0.copy()
 
+    t = 0
     dt = CFL * np.max(np.abs(u)) * dx
     dt = np.minimum(dt, T-t)
     
     eps = np.random.rand(1)*1e-16
 
-    t = 0
     while t < T:
 
         # Define sonic point
