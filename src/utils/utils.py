@@ -89,3 +89,25 @@ def step(N=1000, L=1):
     x0 = (np.arange(N)+0.5)*dx
     u0 = np.where(x0 < 0.5, 1., -1.)
     return x0, u0
+
+def wave_combination(N=200, L=2):
+    a = 0.5
+    z = -0.7
+    delta = 0.005
+    alpha = 10
+    beta = np.log(2)/(36*delta**2)
+
+    def F(x, alpha, a):
+        return np.sqrt(np.maximum(1-alpha**2*(x-a)**2,0))
+    
+    def G(x, beta, z):
+        return np.exp(-beta*(x-z)**2)
+    
+    dx = L / N
+    x0 = (np.arange(N)+0.5)*dx - 1 - dx/2
+    u0 = 1/6 * (G(x0,beta,z-delta) + G(x0,beta,z+delta) + 4*G(x0,beta,z)) * np.logical_and(x0 >= -0.8, x0 <= -0.6) \
+         + 1 * np.logical_and(x0 >= -0.4, x0 <= -0.2) \
+         + (1 - np.abs(10*(x0 - 0.1))) * np.logical_and(x0 >= 0, x0 <= 0.2) \
+         + 1/6 * (F(x0,alpha,a-delta) + F(x0,alpha,a+delta) + 4*F(x0,alpha,a)) * np.logical_and(x0 >= 0.4, x0 <= 0.6)
+    
+    return x0, u0
