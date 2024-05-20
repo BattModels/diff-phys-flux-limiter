@@ -10,14 +10,13 @@ def analytic_flux_burgers(u):
 def solve_burgers_1D(u0, T, dx, CFL, flux_limiter, nu=0.01):
     u = u0.copy()
 
-    t = 0
-    dt = CFL * np.max(np.abs(u)) * dx
-    dt = np.minimum(dt, T-t)
-    
     eps = np.random.rand(1)*1e-16
 
+    t = 0
     while t < T:
-
+        dt = CFL * dx / np.max(np.abs(u))
+        dt = np.minimum(dt, T-t)
+        
         # Define sonic point
         u_bar = 0
 
@@ -26,7 +25,7 @@ def solve_burgers_1D(u0, T, dx, CFL, flux_limiter, nu=0.01):
         f_plus = analytic_flux_burgers(u_plus)
         f_minus = analytic_flux_burgers(u_minus)
 
-        f_eo = f_plus + np.roll(f_minus, -1)
+        F_eo = f_plus + np.roll(f_minus, -1)
         delta_f_plus = np.roll(f_plus, -1) - f_plus
         delta_f_minus = np.roll(f_minus, -1) - f_minus
 
@@ -45,12 +44,97 @@ def solve_burgers_1D(u0, T, dx, CFL, flux_limiter, nu=0.01):
         phi_plus = flux_limiter(r_plus)
         phi_minus = flux_limiter(r_minus)
 
-        u -= dt/dx * ((f_eo - np.roll(f_eo, 1)) \
+        u -= dt/dx * ((F_eo - np.roll(F_eo, 1)) \
                     + (phi_plus * alpha_plus * delta_f_plus \
                     - np.roll(phi_plus, 1) * np.roll(alpha_plus, 1) * np.roll(delta_f_plus, 1)) \
                     + (phi_minus * np.roll(alpha_minus, 1) * np.roll(delta_f_minus, 1) \
                     - np.roll(phi_minus, -1) * alpha_minus * delta_f_minus))
         
+        t += dt
+
+    return u
+
+def solve_burgers_1D_torch(u0, T, dx, CFL, model, nu=0.01):
+    u = torch.clone(u0)
+
+    # Roll along the last dimension of the tensor
+    dim = u.dim() - 1
+
+    # Define eps to avoid division by 0
+    eps = torch.rand(1).item()*1e-16
+
+    t = 0
+    while t < T:
+        dt = CFL * dx / torch.max(torch.abs(u.detach()))
+        dt = torch.minimum(dt, torch.Tensor([T-t]))
+
+        # Define sonic point
+        u_bar = 0.
+
+        # u_plus = torch.maximum(torch.clone(u),torch.Tensor([u_bar]))
+        # u_minus = torch.minimum(torch.clone(u),torch.Tensor([u_bar]))
+        u_plus = torch.maximum(u,torch.Tensor([u_bar]))
+        u_minus = torch.minimum(u,torch.Tensor([u_bar]))
+        f_plus = analytic_flux_burgers(u_plus)
+        f_minus = analytic_flux_burgers(u_minus)
+
+        F_eo = f_plus + torch.roll(f_minus, -1, dim)            # f_{i+1/2}
+
+        # ==========================================================================================================
+        # Flux-difference splitting
+        # ==========================================================================================================
+        delta_f_plus = torch.roll(f_plus, -1, dim) - f_plus
+        delta_f_minus = torch.roll(f_minus, -1, dim) - f_minus
+        delta_u = torch.roll(u, -1, dim) - u
+        
+        # (1) Inplace operations
+        # div_zero_idx = (delta_u == 0)
+        # delta_f_plus[div_zero_idx] = u_plus[div_zero_idx]
+        # delta_f_minus[div_zero_idx] = u_minus[div_zero_idx]
+        # delta_u[div_zero_idx] = 1
+        # CFL_plus = dt/dx * delta_f_plus / delta_u
+        # CFL_minus = dt/dx * delta_f_minus / delta_u
+
+        # (2) Without inplace operations
+        # Without 1e-8, there would be a division by 0 issue in backward pass
+        CFL_plus = dt/dx * torch.where(delta_u == 0, u_plus, delta_f_plus / (delta_u + 1e-8)) 
+        CFL_minus = dt/dx * torch.where(delta_u == 0, u_minus, delta_f_minus / (delta_u + 1e-8))
+
+        alpha_plus = 0.5 * (1 - CFL_plus)
+        alpha_minus = 0.5 * (1 + CFL_minus)
+        r_plus = (torch.roll(alpha_plus, 1, dim) * torch.roll(delta_f_plus, 1, dim)) / (alpha_plus * delta_f_plus + eps)
+        r_minus = (alpha_minus * delta_f_minus) / (torch.roll(alpha_minus, 1, dim) * torch.roll(delta_f_minus, 1, dim) + eps)
+        phi_plus = model(r_plus.view(-1,1))
+        phi_minus = model(r_minus.view(-1,1))
+        phi_plus = phi_plus.view(u.shape)
+        phi_minus = phi_minus.view(u.shape)
+
+        # It is better not to use '-=' because it is likely to cause inplace modification error during backward pass
+        u = u - dt/dx * ((F_eo - torch.roll(F_eo, 1, dim)) \
+                    + (phi_plus * alpha_plus * delta_f_plus \
+                    - torch.roll(phi_plus, 1, dim) * torch.roll(alpha_plus, 1, dim) * torch.roll(delta_f_plus, 1, dim)) \
+                    + (phi_minus * torch.roll(alpha_minus, 1, dim) * torch.roll(delta_f_minus, 1, dim) \
+                    - torch.roll(phi_minus, -1, dim) * alpha_minus * delta_f_minus))
+        
+        # ==========================================================================================================
+        # Another implementation without using flux splitting (something is going wrong)
+        # ==========================================================================================================
+        # f = u**2/2
+        # delta_f = torch.roll(f, -1, dim) - f
+        # delta_u = torch.roll(u, -1, dim) - u
+        # a = torch.where(delta_u == 0, u, delta_f / (delta_u))
+
+        # r_pos = (u - torch.roll(u, 1, dim)) / (torch.roll(u, -1, dim) - u + eps)
+        # r_neg = (torch.roll(u, -2, dim) - torch.roll(u, -1, dim)) / (torch.roll(u, -1, dim) - u + eps)
+
+        # r = torch.where(a > 0, r_pos, r_neg)
+        # phi = model(r.view(-1, 1))
+        # phi = phi.view(u.shape)
+
+        # F_correction = 0.5*torch.abs(a)*(1-dt/dx*torch.abs(a))*phi*delta_u
+        # F = F_eo + F_correction
+        # u = u - dt/dx * (torch.roll(F, -1, dim) - F)
+
         t += dt
 
     return u
