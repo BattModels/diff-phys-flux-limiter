@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from models.model import FluxLimiter
 from utils import fvm_solver, utils
-from data.linear_adv_dataset import load_linear_adv_1d
+from data.dataset import load_linear_adv_1d
 
 from omegaconf import DictConfig, OmegaConf
 import hydra
@@ -19,17 +19,21 @@ def save_checkpoint(model):
     torch.save(model.state_dict(), 'model.pt')
 
     model.eval()
-    r_min = -10
-    r_max = 50
+    r_min = -2
+    r_max = 10
     n_eval = 1000
     r_eval = np.linspace(r_min, r_max, n_eval)
     with torch.no_grad():
         preds = model(torch.Tensor(r_eval).view(-1,1))
     fig, ax = plt.subplots()
-    ax.plot(r_eval, preds.cpu(), '.', label="neural flux limiter")
+    ax.plot(r_eval, utils.minmod(r_eval), label="minmod")
     ax.plot(r_eval, utils.vanLeer(r_eval), label="van Leer")
+    ax.plot(r_eval, utils.superbee(r_eval), label="superbee")
+    ax.plot(r_eval, preds.cpu(), label="neural flux limiter")
+    ax.set_xlabel('$r$')
+    ax.set_ylabel('$\phi(r)$')
     ax.legend()
-    fig.savefig('learned_limiter_linear_case')
+    fig.savefig('learned_limiter_linear_case', dpi=300)
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config")
 def train_neural_flux_limiter(cfg: DictConfig) -> None:
@@ -42,7 +46,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Initiate wandb
     if cfg.wandb.log:
         wandb.init(
-            project="1D-tvd-flux-limiter-linear-adv", 
+            project="1d-tvd-flux-limiter-linear-adv", 
             name=f"{cfg.training_type}-{cfg.data.CG}xCG", 
             config={
             "learning_rate": cfg.opt.lr,
