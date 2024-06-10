@@ -40,9 +40,6 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Setup device
     device = cfg.device
 
-    # Print out the config
-    print(OmegaConf.to_yaml(cfg))
-
     # Initiate wandb
     if cfg.wandb.log:
         wandb.init(
@@ -53,7 +50,10 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
             "architecture": "MLP",
             "dataset": cfg.data.filename,
             "epochs": cfg.opt.n_epochs,
-            })    
+            })
+    
+    # Print out the config
+    print(OmegaConf.to_yaml(cfg))
 
     # Model
     model = FluxLimiter(
@@ -218,7 +218,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                         "valid loss 2": total_valid_loss_2,
                         "learning rate": scheduler.optimizer.param_groups[0]['lr']})
 
-        if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs):
+        if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs - 1):
             save_checkpoint(model)
 
     if cfg.wandb.log:

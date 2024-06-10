@@ -33,15 +33,12 @@ def save_checkpoint(model):
     ax.set_xlabel('$r$')
     ax.set_ylabel('$\phi(r)$')
     ax.legend()
-    fig.savefig('learned_limiter_burgers')
+    fig.savefig('learned_limiter_burgers', dpi=300)
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config_burgers")
 def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Setup device
     device = cfg.device
-
-    # Print out the config
-    print(OmegaConf.to_yaml(cfg))
 
     # Initiate wandb
     if cfg.wandb.log:
@@ -53,7 +50,10 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
             "architecture": "MLP",
             "dataset": cfg.data.filename,
             "epochs": cfg.opt.n_epochs,
-            })    
+            })
+    
+    # Print out the config
+    print(OmegaConf.to_yaml(cfg))
 
     # Model
     model = FluxLimiter(
@@ -82,7 +82,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     ax.plot(np.linspace(0, 10, 1000), utils.vanLeer(np.linspace(0, 10, 1000)))
     ax.plot(np.linspace(0, 10, 1000), utils.superbee(np.linspace(0, 10, 1000)))
     ax.plot(np.linspace(-2, 10, 1000), preds.cpu())
-    fig.savefig('model_before_finetune_burgers')
+    fig.savefig('initial_model_burgers', dpi=300)
 
     # Optimizer
     optimizer = torch.optim.Adam(
@@ -127,7 +127,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # model_lin = model_lin.to(device)
 
     # Train and evaluate
-    torch.autograd.set_detect_anomaly(True)
+    # torch.autograd.set_detect_anomaly(True)
     for epoch in range(cfg.opt.n_epochs):
         print('Epoch {}:'.format(epoch))
 
@@ -207,7 +207,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                         # "valid loss of lin fl": total_valid_loss_2,
                         "learning rate": scheduler.optimizer.param_groups[0]['lr']})
 
-        if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs):
+        if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs - 1):
             save_checkpoint(model)
 
     if cfg.wandb.log:
