@@ -1,0 +1,45 @@
+device: "cpu"
+training_type: "solver in the loop" # "single step" or "solver in the loop"
+
+# Network
+net:
+  n_input: 1
+  n_output: 1
+  n_hidden: 64
+  n_layers: 5
+  
+  activation: "Tanh"
+
+# Optimizer
+opt:
+  n_epochs: 100
+  lr: 1e-3
+  weight_decay: 0.0
+
+  scheduler: "StepLR" #'ReduceLROnPlateau' or 'CosineAnnealingLR'
+  factor: 0.1      # for ReduceLROnPlateau only
+  patience: 0     # for ReduceLROnPlateau only
+
+  grad_clipping: False
+  n_checkpoint: 1
+
+# data:
+  # folder: '~/scratch/flux_limiter/data/'
+  # filename: '1D_Burgers_Sols_Nu0.001.hdf5'
+  # batch_size: 128
+  # n_train: 1280
+  # test_batch_size: 64
+  # n_test: 256
+
+  # spatial_length: 1024
+  # temporal_length: 201
+  # CG: 8
+
+  # xL: 0.
+  # xR: 1.
+  # dt: ''
+  # t_end: 0.2     # The value can only be chosen as multiples of 0.01
+  # CFL: 0.4
+
+wandb:
+  log: True

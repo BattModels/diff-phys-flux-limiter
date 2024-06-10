@@ -65,7 +65,7 @@ def solve_burgers_1D_torch(u0, T, dx, CFL, model, nu=0.01):
 
     t = 0
     while t < T:
-        dt = CFL * dx / torch.max(torch.abs(u.detach()))
+        dt = CFL * dx / torch.max(torch.abs(u))
         dt = torch.minimum(dt, torch.Tensor([T-t]))
 
         # Define sonic point
@@ -263,3 +263,145 @@ def solve_burgers_1D_exactly(Nx=1000, T_end=1., dt=1e-3):
         U = np.concatenate((U, np.zeros((Nt+1, 1)), -np.fliplr(U)), axis=1)
 
     return T, X, U
+
+def flux_func_torch(q, gamma=1.4):
+    # Primitive variables
+    r = q[0]
+    u = q[1]/r
+    E = q[2]
+    p = (gamma - 1.)*(E - 0.5*r*u**2)
+    
+    # Flux vector
+    f0 = r*u
+    f1 = r*u**2+p
+    f2 = u*(E+p)
+    flux = torch.tensor([f0, f1, f2], dtype=torch.float32)
+    
+    return flux
+
+def roe_flux_torch(ql, qr, gamma=1.4):
+    # Primitive variables
+    rl = ql[0]
+    ul = ql[1]/rl
+    El = ql[2]
+    pl = (gamma - 1.) * (El - 0.5*rl*ul**2)
+    hl = (El + pl) / rl
+
+    rr = qr[0]
+    ur = qr[1]/rr
+    Er = qr[2]
+    pr = (gamma - 1.) * (Er - 0.5*rr*ur**2)
+    hr = (Er + pr) / rr
+
+    # Roe-averages
+    R = torch.sqrt(rr/rl)
+    uhat = (ul + R*ur) / (1+R)
+    hhat = (hl + R*hr) / (1+R)
+    chat = torch.sqrt((gamma - 1.)*(hhat - 0.5*uhat**2))
+
+    # Right Eigenvectors
+    r1 = torch.tensor([1, uhat - chat, hhat - uhat*chat], dtype=torch.float32)
+    r2 = torch.tensor([1, uhat,        0.5*uhat**2],      dtype=torch.float32)
+    r3 = torch.tensor([1, uhat + chat, hhat + uhat*chat], dtype=torch.float32)
+    r = torch.stack((r1, r2, r3))
+    
+    # Auxiliary variables to compute left eigenvectors l_i (no relation with alpha_i below)
+    alpha = (gamma - 1.) * uhat**2 / (2*chat**2)
+    beta = (gamma - 1.) / (chat**2)
+
+    # Left eigenvectors
+    l1 = torch.tensor([0.5 * (alpha + uhat/chat), -0.5 * (beta*uhat + 1/chat), 0.5 * beta], dtype=torch.float32)
+    l2 = torch.tensor([1-alpha,                   beta*uhat,                   -beta],      dtype=torch.float32)
+    l3 = torch.tensor([0.5 * (alpha - uhat/chat), -0.5 * (beta*uhat - 1/chat), 0.5 * beta], dtype=torch.float32)
+
+    # Compute wave coefficients
+    dq = qr - ql
+    alpha1 = torch.dot(dq, l1)
+    alpha2 = torch.dot(dq, l2)
+    alpha3 = torch.dot(dq, l3)
+    wave_coefs = torch.tensor([alpha1, alpha2, alpha3], dtype=torch.float32)
+
+    # Wave speeds (eigenvalues)
+    s1 = uhat - chat
+    s2 = uhat
+    s3 = uhat + chat
+    s = torch.tensor([s1, s2, s3], dtype=torch.float32)
+
+    fl = flux_func_torch(ql)
+    fr = flux_func_torch(qr)
+    
+    # Roe flux
+    F = 0.5*(fl + fr) - 0.5*(torch.abs(s1)*alpha1*r1 + torch.abs(s2)*alpha2*r2 + torch.abs(s3)*alpha3*r3)
+    
+    return F, s, wave_coefs, r
+
+def solve_euler_1d_torch(mesh, initial_q, flux_limiter, t_end=0.2, CFL=0.4, gamma=1.4):
+    # # Parameters
+    dx = mesh[1] - mesh[0]                 # Cell size
+    n_edges = torch.numel(mesh)+1               # Number of edges (including two boundaries)
+
+    q = torch.clone(initial_q)
+    # Solver loop
+    t = 0
+    while t < t_end:
+        # Initialize flux residuals and wave speeds
+        residuals = torch.zeros_like(q)
+        wave_speeds = torch.zeros((3, n_edges))
+
+        # Variables stored for flux limiter (tall matrices instead of fat matrices!!!)
+        alpha_all = torch.zeros((n_edges, 3))     # Coefficients of wave families
+        r_all = torch.zeros((n_edges, 3, 3))      # Wave families
+
+        # Loop over interior cell interfaces
+        for iEdge in range(1, n_edges-1):
+            # Convert the edge index to cell indices
+            iL = iEdge-1
+            iR = iEdge
+            F, s, alpha, r = roe_flux_torch(q[:, iL].clone(), q[:, iR].clone())
+            residuals[:, iL] += F
+            residuals[:, iR] -= F
+            wave_speeds[:,iEdge] = s
+
+            alpha_all[iEdge] = alpha
+            r_all[iEdge] = r
+        
+        dt = torch.min(torch.tensor([CFL*dx/(torch.max(torch.abs(wave_speeds))), t_end-t], dtype=torch.float32))
+
+        # Apply flux limiter
+        # First populate the left and right boundaries to enforce Dirichlet BCs
+        alpha_all[0] = alpha_all[1]
+        alpha_all[-1] = alpha_all[-2]
+        r_all[0] = r_all[1]
+        r_all[-1] = r_all[-2]
+        for iEdge in range(1, n_edges-1):
+            iL = iEdge-1
+            iR = iEdge
+            for iWave in range(3):
+                wave_speed = wave_speeds[iWave, iEdge]
+                alpha = alpha_all[iEdge][iWave]
+                r = r_all[iEdge][iWave]
+                if wave_speed > 0:
+                    alpha_l = alpha_all[iEdge-1][iWave]
+                    rl = r_all[iEdge-1][iWave]
+                    theta = torch.dot(alpha_l*rl, r)/torch.dot(r,r) / (alpha + 1e-8)
+                else:
+                    alpha_r = alpha_all[iEdge+1][iWave]
+                    rr = r_all[iEdge+1][iWave]
+                    theta = torch.dot(alpha_r*rr, r)/torch.dot(r,r) / (alpha + 1e-8)
+                F_correction = 0.5*torch.abs(wave_speed)*(1-dt/dx*torch.abs(wave_speed))*alpha*flux_limiter(torch.tensor([theta], dtype=torch.float32))*r
+                residuals[:, iL] += F_correction
+                residuals[:, iR] -= F_correction
+
+        # Update states without the left and right boundary cells
+        # to enforce Dirichlet BCs
+        q[:, 1:-1] -= dt/dx*residuals[:, 1:-1]
+        t += dt
+
+        # Compute primary variables
+        rho = q[0]
+        u = q[1]/rho
+        E = q[2]
+        p = (gamma-1.)*(E-0.5*rho*u**2)
+        if torch.min(p)<0: print ('negative pressure found!')
+
+    return mesh, rho, u, p
