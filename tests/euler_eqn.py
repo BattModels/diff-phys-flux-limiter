@@ -16,9 +16,9 @@ def flux_func(q, gamma=1.4):
     p = (gamma - 1.)*(E - 0.5*r*u**2)
     
     # Flux vector
-    f0 = np.array(r*u)
-    f1 = np.array(r*u**2+p)
-    f2 = np.array(u*(E+p))
+    f0 = r*u
+    f1 = r*u**2+p
+    f2 = u*(E+p)
     flux = np.array([f0, f1, f2])
     
     return flux
@@ -47,6 +47,7 @@ def roe_flux(ql, qr, gamma=1.4):
     r1 = np.array([1, uhat - chat, hhat - uhat*chat])
     r2 = np.array([1, uhat, 0.5*uhat**2])
     r3 = np.array([1, uhat + chat, hhat + uhat*chat])
+    r = np.array([r1, r2, r3])
     
     # Auxiliary variables to compute left eigenvectors l_i (no relation with alpha_i below)
     alpha = (gamma - 1.) * uhat**2 / (2*chat**2)
@@ -62,6 +63,7 @@ def roe_flux(ql, qr, gamma=1.4):
     alpha1 = np.dot(dq, l1)
     alpha2 = np.dot(dq, l2)
     alpha3 = np.dot(dq, l3)
+    wave_coefs = np.array([alpha1, alpha2, alpha3])
 
     # Wave speeds (eigenvalues)
     s1 = uhat - chat
@@ -75,7 +77,7 @@ def roe_flux(ql, qr, gamma=1.4):
     # Roe flux
     F = 0.5*(fl + fr) - 0.5*(abs(s1)*alpha1*r1 + abs(s2)*alpha2*r2 + abs(s3)*alpha3*r3)
     
-    return F, s, np.array([alpha1, alpha2, alpha3]), np.array([r1, r2, r3])
+    return F, s, wave_coefs, r
 
 def create_initial_states_arr(config_name, n_cells, gamma=1.4):
     if config_name == 'Sod' or config_name == 'Lax':
@@ -88,8 +90,8 @@ def create_initial_states_arr(config_name, n_cells, gamma=1.4):
 
         x_ini = 0.
         x_fin = 1.
-        dx = (x_fin - x_ini) / n_cells    # Cell size
-        x = (np.arange(n_cells)+0.5)*dx   # Mesh
+        dx = (x_fin - x_ini) / n_cells            # Cell size
+        x = (np.arange(n_cells)+0.5)*dx + x_ini   # Mesh
 
         r0 = np.where(x < 0.5*(x_ini + x_fin), left_state[0]*np.ones(n_cells), right_state[0]*np.ones(n_cells))        # Density
         u0 = np.where(x < 0.5*(x_ini + x_fin), left_state[1]*np.ones(n_cells), right_state[1]*np.ones(n_cells))        # Velocity
@@ -98,8 +100,8 @@ def create_initial_states_arr(config_name, n_cells, gamma=1.4):
     elif config_name == 'Shu-Osher':
         x_ini = -5.
         x_fin = 5.
-        dx = (x_fin - x_ini) / n_cells    # Cell size
-        x = (np.arange(n_cells)+0.5)*dx + x_ini  # Mesh
+        dx = (x_fin - x_ini) / n_cells            # Cell size
+        x = (np.arange(n_cells)+0.5)*dx + x_ini   # Mesh
     
         eps = 0.2
         r0 = np.where(x < -4., 3.857143*np.ones(n_cells), 1 + eps*np.sin(5*x))        # Density
@@ -116,27 +118,9 @@ def create_initial_states_arr(config_name, n_cells, gamma=1.4):
 
 
 def solve_euler_1d(mesh, initial_q, flux_limiter, t_end=0.2, CFL=0.4, gamma=1.4):
-    # # Parameters
+    # Parameters
     dx = mesh[1] - mesh[0]                 # Cell size
     n_edges = mesh.size+1               # Number of edges (including two boundaries)
-    # x = (np.arange(n_cells)+0.5)*dx   # Mesh
-
-    # # Initial conditions
-    # r0 = np.zeros(n_cells)            # Density
-    # u0 = np.zeros(n_cells)            # Velocity
-    # p0 = np.zeros(n_cells)            # Pressure
-    # mid_cell = int(n_cells/2)
-
-    # print ("Problem: Sod's Shock Tube")
-    # r0[:mid_cell] = left_state[0]
-    # r0[mid_cell:] = right_state[0]
-    # u0[:mid_cell] = left_state[1]
-    # u0[mid_cell:] = right_state[1]
-    # p0[:mid_cell] = left_state[2]
-    # p0[mid_cell:] = right_state[2]
-    
-    # E0 = p0/(gamma-1.) + 0.5*r0*u0**2      # Energy per unit volume
-    # q  = np.array([r0, r0*u0, E0])         # Vector of conserved variables
 
     q = initial_q.copy()
     # Solver loop
@@ -302,10 +286,20 @@ def main(config_name, n_cells):
     model.load_state_dict(torch.load("model.pt"))
     model = model.to(device)
 
-    def neural_flux_limiter(r):
+    def neural_flux_limiter_linear(r):
         model.eval()
         with torch.no_grad():
             phi = model(torch.Tensor([r]).view(-1, 1).to(device))
+        return phi.numpy().squeeze()
+    
+    model_euler = FluxLimiter(1,1,64,5,act="Tanh") #
+    model_euler.load_state_dict(torch.load("model_euler_best.pt"))
+    model_euler = model_euler.to(device)
+    
+    def neural_flux_limiter_euler(r):
+        model_euler.eval()
+        with torch.no_grad():
+            phi = model_euler(torch.Tensor([r]).view(-1, 1).to(device))
         return phi.numpy().squeeze()
 
     flux_limiters = {
@@ -315,14 +309,12 @@ def main(config_name, n_cells):
         "Superbee": utils.superbee,
         "Van Leer": utils.vanLeer,
         "Koren": utils.koren,
-        "Neural network": neural_flux_limiter,
+        "Neural network (linear)": neural_flux_limiter_linear,
+        "Neural network (euler)": neural_flux_limiter_euler,
+        # "Piecewise linear": utils.piecewise_linear_limiter,
     }
-    markers = ['s', 'x', '+', 'o', '^', '*']
-    colors = ['pink', 'brown', 'red', 'purple', 'green', 'orange']
-
-    # Define initial states
-    # config_name = 'Shu-Osher'
-    # n_cells = 200
+    markers = ['s', 'x', '+', 'o', '^', '*', 'p']
+    colors = ['pink', 'brown', 'red', 'purple', 'green', 'orange', 'cyan']
 
     if config_name == 'Sod':
         t = 0.2
@@ -342,7 +334,7 @@ def main(config_name, n_cells):
                                             t=t,
                                             )
     else:
-        mesh_a, initial_q_a = create_initial_states_arr(config_name=config_name, n_cells=800)
+        mesh_a, initial_q_a = create_initial_states_arr(config_name=config_name, n_cells=909)
         x_a, rho_a, u_a, p_a = solve_euler_1d(mesh=mesh_a,
                                               initial_q=initial_q_a,
                                               flux_limiter=utils.vanLeer, 
@@ -352,7 +344,7 @@ def main(config_name, n_cells):
                                               )
     
     # Plot to compare solutions
-    fig,axes = plt.subplots(nrows=3, ncols=1)
+    fig,axes = plt.subplots(nrows=1, ncols=3)
     axes[0].plot(x_a, rho_a, 'k-', label='Exact', clip_on=False)
     axes[1].plot(x_a, u_a,   'k-', label='Exact', clip_on=False)
     axes[2].plot(x_a, p_a,   'k-', label='Exact', clip_on=False)
@@ -372,16 +364,21 @@ def main(config_name, n_cells):
         axes[0].scatter(x, rho, s=8, marker=markers[i], c=colors[i], label=name, clip_on=False)
         axes[1].scatter(x, u,   s=8, marker=markers[i], c=colors[i], label=name, clip_on=False)
         axes[2].scatter(x, p,   s=8, marker=markers[i], c=colors[i], label=name, clip_on=False)
-        # print(f"MSE of density:  {np.sum((rho - rho_a)**2)/rho.size}")
-        # print(f"MSE of velocity: {np.sum((u - u_a)**2)/u.size}")
-        # print(f"MSE of pressure: {np.sum((p - p_a)**2)/p.size}")
+        if config_name == 'Sod':
+            print(f"MSE of density:  {np.sum((rho - rho_a)**2)/rho.size}")
+            print(f"MSE of velocity: {np.sum((u - u_a)**2)/u.size}")
+            print(f"MSE of pressure: {np.sum((p - p_a)**2)/p.size}")
+        else:
+            print(f"MSE of density:  {np.sum((rho - rho_a[4::9])**2)/rho.size}")
+            print(f"MSE of velocity: {np.sum((u - u_a[4::9])**2)/u.size}")
+            print(f"MSE of pressure: {np.sum((p - p_a[4::9])**2)/p.size}")
     axes[0].legend()
     axes[1].legend()
     axes[2].legend()
     
-    fig.set_size_inches(10,30)
-    fig.savefig(config_name)
+    fig.set_size_inches(30,10)
+    fig.savefig(config_name, dpi=300)
 
 if __name__ == "__main__":
-    main(config_name='Lax', n_cells=101)
+    main(config_name='Shu-Osher', n_cells=101)
 
