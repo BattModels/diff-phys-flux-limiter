@@ -175,6 +175,7 @@ def solve_linear_advection_1D(u0, T, a, dx, CFL, flux_limiter):
 
     return u, u_all
 
+@torch.compile
 def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
     """ Solve the linear advection equation using torch instead of numpy for the purpose of back propagation
         \partial{u}/\partial{t} + a \partial{u}/\partial{x} = 0
@@ -183,12 +184,13 @@ def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
         u0: 1 by N tensor, N is the number of cells
     """
 
+    device = u0.device
+
     dt = CFL * dx / a
     n_timesteps = int(T/dt)
 
     # Need to fix when u0 is 1d tensor
-    u_all = torch.zeros((u0.shape[0], n_timesteps, u0.shape[1]))
-    # r_all = torch.zeros(u_all.shape)
+    u_all = torch.zeros((u0.shape[0], n_timesteps, u0.shape[1])).to(device)
 
     u = torch.clone(u0)
 
@@ -211,11 +213,47 @@ def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
         u -= dt/dx * (F - torch.roll(F, 1, dim))
 
         u_all[:,i,:] = torch.clone(u)
-        # r_all[:,i,:] = torch.clone(r).detach()
 
-    # return u, u_all
-    # return u_all, r_all
     return u_all
+
+# @torch.compile
+# def _solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
+#     """ Solve the linear advection equation using torch instead of numpy for the purpose of back propagation
+#         \partial{u}/\partial{t} + a \partial{u}/\partial{x} = 0
+
+#         parameters:
+#         u0: 1 by N tensor, N is the number of cells
+#     """
+
+#     dt = CFL * dx / a
+#     n_timesteps = int(T/dt)
+
+#     u_all = []
+#     u = torch.clone(u0)
+
+#     for i in range(n_timesteps):
+#         f = a * u
+
+#         r = utils.compute_r_torch(u, torch.roll(u, 1), torch.roll(u, -1)) # r_{i+1/2}
+
+#         F_low = 0.5 * (f + torch.roll(f, -1)) - 0.5 * abs(a) * (torch.roll(u, -1) - u)
+#         F_high = f + 0.5 * (1 - CFL) * (torch.roll(f, -1) - f)
+
+#         phi = model(r.view(-1, 1))
+#         # phi = phi.view(u.shape)
+#         phi = phi.squeeze()
+
+#         F = (1 - phi) * F_low + phi * F_high 
+
+#         u -= dt/dx * (F - torch.roll(F, 1))
+
+#         u_all.append(torch.clone(u))
+
+#     u_all = torch.stack(u_all)
+    
+#     return u_all
+
+# solve_linear_advection_1D_torch = torch.vmap(_solve_linear_advection_1D_torch, in_dims=(0, None, None, None, None, None))
 
 def construct_char_eqn(x, t):
     def char_eqn(x0):
