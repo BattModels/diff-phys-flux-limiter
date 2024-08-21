@@ -46,7 +46,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     if cfg.wandb.log:
         wandb.init(
             project="1d-tvd-flux-limiter-linear-adv", 
-            name=f"{cfg.training_type}-{cfg.data.CG}xCG", 
+            name=f"{cfg.data.CG}xCG", 
             config={
             "learning_rate": cfg.opt.lr,
             "architecture": "MLP",
@@ -72,8 +72,8 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
 
     model = model.to(device)
 
-    if cfg.wandb.log:
-        wandb.watch(model, log="all", log_freq=1)
+    # if cfg.wandb.log:
+        # wandb.watch(model, log="all", log_freq=1)
 
     # Plot the flux limiter before training
     model.eval()
@@ -139,7 +139,14 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 CFL=cfg.data.CFL,
                 model=model)
 
-            loss = nn.MSELoss()(u, sample['y'])
+            loss = nn.MSELoss()(u, sample['y'].to(device))
+            # loss = torch.mean(
+            #         torch.stack(
+            #             [
+            #                 nn.L1Loss()(u[i], sample['y'][i].to(device)) / nn.L1Loss()(sample['y'][i].to(device), torch.zeros_like(sample['y'][i]).to(device)) for i in range(len(sample['y']))
+            #             ]
+            #         )
+            #     )
 
             # print(f"train batch loss {ibatch}: {loss.item()}")
 
@@ -170,7 +177,14 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                     CFL=cfg.data.CFL,
                     model=model)
                 
-                loss = nn.MSELoss()(u, sample['y'])
+                loss = nn.MSELoss()(u, sample['y'].to(device))
+                # loss = torch.mean(
+                #     torch.stack(
+                #         [
+                #             nn.L1Loss()(u[i], sample['y'][i].to(device)) / nn.L1Loss()(sample['y'][i].to(device), torch.zeros_like(sample['y'][i]).to(device)) for i in range(len(sample['y']))
+                #         ]
+                #     )
+                # )
 
                 # print(f"valid batch loss {ibatch}: {loss.item()}")
 
@@ -192,7 +206,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 dx=1./128,
                 CFL=cfg.data.CFL,
                 model=model)
-            total_valid_loss_2 = nn.MSELoss()(u[:,-1,:], u0).item()
+            total_valid_loss_2 = nn.MSELoss()(u[:,-1,:], u0.to(device)).item()
             print(f"Loss valid 2: {total_valid_loss_2}")
             
         scheduler.step(total_valid_loss)
