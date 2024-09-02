@@ -1,4 +1,5 @@
 import os
+import time
 import torch
 import torch.nn as nn
 import numpy as np
@@ -15,7 +16,7 @@ import wandb
 
 torch.manual_seed(3407)
 
-def save_checkpoint(model):
+def save_checkpoint(model, device):
     torch.save(model.state_dict(), 'model_burgers.pt')
 
     model.eval()
@@ -24,27 +25,28 @@ def save_checkpoint(model):
     n_eval = 1000
     r_eval = np.linspace(r_min, r_max, n_eval)
     with torch.no_grad():
-        preds = model(torch.Tensor(r_eval).view(-1,1))
+        preds = model(torch.Tensor(r_eval).view(-1,1).to(device))
     fig, ax = plt.subplots()
     ax.plot(r_eval, utils.minmod(r_eval), label="minmod")
     ax.plot(r_eval, utils.vanLeer(r_eval), label="van Leer")
     ax.plot(r_eval, utils.superbee(r_eval), label="superbee")
-    ax.plot(r_eval, preds.cpu(), label="neural flux limiter")
+    ax.plot(r_eval, preds.cpu().numpy(), label="neural flux limiter")
     ax.set_xlabel('$r$')
     ax.set_ylabel('$\phi(r)$')
     ax.legend()
     fig.savefig('learned_limiter_burgers', dpi=300)
+    plt.close()
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config_burgers")
 def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Setup device
-    device = cfg.device
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Initiate wandb
     if cfg.wandb.log:
         wandb.init(
             project="1d-tvd-flux-limiter-burgers", 
-            name=f"{cfg.training_type}-{cfg.data.CG}xCG", 
+            name=f"{cfg.data.CG}xCG", 
             config={
             "learning_rate": cfg.opt.lr,
             "architecture": "MLP",
@@ -70,18 +72,18 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
 
     model = model.to(device)
 
-    if cfg.wandb.log:
-        wandb.watch(model, log="all", log_freq=1)
+    # if cfg.wandb.log:
+    #     wandb.watch(model, log="all", log_freq=1)
 
     # Plot the flux limiter before training
     model.eval()
     with torch.no_grad():
-        preds = model(torch.linspace(-2, 10, 1000).view(-1,1))
+        preds = model(torch.linspace(-2, 10, 1000).view(-1,1).to(device))
     fig, ax = plt.subplots()
     ax.plot(np.linspace(0, 10, 1000), utils.minmod(np.linspace(0, 10, 1000)))
     ax.plot(np.linspace(0, 10, 1000), utils.vanLeer(np.linspace(0, 10, 1000)))
     ax.plot(np.linspace(0, 10, 1000), utils.superbee(np.linspace(0, 10, 1000)))
-    ax.plot(np.linspace(-2, 10, 1000), preds.cpu())
+    ax.plot(np.linspace(-2, 10, 1000), preds.cpu().numpy())
     fig.savefig('initial_model_burgers', dpi=300)
 
     # Optimizer
@@ -134,6 +136,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         # Begin training
         model.train(True)
 
+        start_time = time.time()
         total_train_loss = 0.
         for ibatch, sample in enumerate(train_loader):
             # Solve for the state at the end of time T
@@ -144,8 +147,8 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 CFL=cfg.data.CFL,
                 model=model)
 
-            loss = nn.MSELoss()(u, sample['y'])
-            print(f"train batch loss {ibatch}: {loss.item()}")
+            loss = nn.MSELoss()(u, sample['y'].to(device))
+            # print(f"train batch loss {ibatch}: {loss.item()}")
 
             optimizer.zero_grad()
             loss.backward()
@@ -156,7 +159,9 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
             total_train_loss += loss.item()
         
         total_train_loss = total_train_loss/(ibatch+1)
+        epoch_time = time.time() - start_time
         print(f"Loss train: {total_train_loss}")
+        print(f"epoch time: {epoch_time}")
 
         # Validation
         total_valid_loss = 0.
@@ -172,8 +177,8 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                     CFL=cfg.data.CFL,
                     model=model)
                 
-                loss = nn.MSELoss()(u, sample['y'])
-                print(f"valid batch loss {ibatch}: {loss.item()}")
+                loss = nn.MSELoss()(u, sample['y'].to(device))
+                # print(f"valid batch loss {ibatch}: {loss.item()}")
 
                 total_valid_loss += loss.item()
 
@@ -208,7 +213,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                         "learning rate": scheduler.optimizer.param_groups[0]['lr']})
 
         if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs - 1):
-            save_checkpoint(model)
+            save_checkpoint(model, device)
 
     if cfg.wandb.log:
         wandb.finish()
