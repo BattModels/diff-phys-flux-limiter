@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 
-from models.model import FluxLimiter
+from models.model import FluxLimiter, SymmetricFluxLimiter
 from utils import fvm_solver, utils
 from data.dataset import load_linear_adv_1d
 
@@ -58,13 +58,22 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     # Model
-    model = FluxLimiter(
-        cfg.net.n_input,
-        cfg.net.n_output,
-        cfg.net.n_hidden,
-        cfg.net.n_layers,
-        cfg.net.activation,
-    )
+    if cfg.net.symmetric:
+        model = SymmetricFluxLimiter(
+            cfg.net.n_input,
+            cfg.net.n_output,
+            cfg.net.n_hidden,
+            cfg.net.n_layers,
+            cfg.net.activation,
+        )
+    else:
+        model = FluxLimiter(
+            cfg.net.n_input,
+            cfg.net.n_output,
+            cfg.net.n_hidden,
+            cfg.net.n_layers,
+            cfg.net.activation,
+        )
 
     # Load pretrained model if with_pretrain == True
     if cfg.net.with_pretrain:
