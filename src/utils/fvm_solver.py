@@ -10,15 +10,15 @@ def analytic_flux_burgers(u):
 def solve_burgers_1D(u0, T, dx, CFL, flux_limiter, nu=0.01):
     u = u0.copy()
 
-    eps = np.random.rand(1)*1e-16
+    eps = 1e-8
 
-    t = 0
+    t = 0.0
     while t < T:
         dt = CFL * dx / np.max(np.abs(u))
         dt = np.minimum(dt, T-t)
         
         # Define sonic point
-        u_bar = 0
+        u_bar = 0.0
 
         u_plus = np.maximum(u,u_bar)
         u_minus = np.minimum(u,u_bar)
@@ -55,26 +55,28 @@ def solve_burgers_1D(u0, T, dx, CFL, flux_limiter, nu=0.01):
     return u
 
 def solve_burgers_1D_torch(u0, T, dx, CFL, model, nu=0.01):
+    device = u0.device
+
     u = torch.clone(u0)
 
     # Roll along the last dimension of the tensor
     dim = u.dim() - 1
 
     # Define eps to avoid division by 0
-    eps = torch.rand(1).item()*1e-16
+    eps = 1e-8
 
-    t = 0
+    t = 0.0
     while t < T:
         dt = CFL * dx / torch.max(torch.abs(u))
-        dt = torch.minimum(dt, torch.Tensor([T-t]))
+        dt = torch.minimum(dt, torch.Tensor([T-t]).to(device))
 
         # Define sonic point
-        u_bar = 0.
+        u_bar = 0.0
 
         # u_plus = torch.maximum(torch.clone(u),torch.Tensor([u_bar]))
         # u_minus = torch.minimum(torch.clone(u),torch.Tensor([u_bar]))
-        u_plus = torch.maximum(u,torch.Tensor([u_bar]))
-        u_minus = torch.minimum(u,torch.Tensor([u_bar]))
+        u_plus = torch.maximum(u,torch.tensor([u_bar], device=device))
+        u_minus = torch.minimum(u,torch.tensor([u_bar], device=device))
         f_plus = analytic_flux_burgers(u_plus)
         f_minus = analytic_flux_burgers(u_minus)
 
@@ -97,8 +99,8 @@ def solve_burgers_1D_torch(u0, T, dx, CFL, model, nu=0.01):
 
         # (2) Without inplace operations
         # Without 1e-8, there would be a division by 0 issue in backward pass
-        CFL_plus = dt/dx * torch.where(delta_u == 0, u_plus, delta_f_plus / (delta_u + 1e-8)) 
-        CFL_minus = dt/dx * torch.where(delta_u == 0, u_minus, delta_f_minus / (delta_u + 1e-8))
+        CFL_plus = dt/dx * torch.where(delta_u == 0, u_plus, delta_f_plus / (delta_u + eps)) 
+        CFL_minus = dt/dx * torch.where(delta_u == 0, u_minus, delta_f_minus / (delta_u + eps))
 
         alpha_plus = 0.5 * (1 - CFL_plus)
         alpha_minus = 0.5 * (1 + CFL_minus)
@@ -175,7 +177,7 @@ def solve_linear_advection_1D(u0, T, a, dx, CFL, flux_limiter):
 
     return u, u_all
 
-@torch.compile
+# @torch.compile
 def solve_linear_advection_1D_torch(u0: torch.Tensor, T, a, dx, CFL, model):
     """ Solve the linear advection equation using torch instead of numpy for the purpose of back propagation
         \partial{u}/\partial{t} + a \partial{u}/\partial{x} = 0
@@ -303,6 +305,8 @@ def solve_burgers_1D_exactly(Nx=1000, T_end=1., dt=1e-3):
     return T, X, U
 
 def flux_func_torch(q, gamma=1.4):
+    device = q.device
+
     # Primitive variables
     r = q[0]
     u = q[1]/r
@@ -313,57 +317,62 @@ def flux_func_torch(q, gamma=1.4):
     f0 = r*u
     f1 = r*u**2+p
     f2 = u*(E+p)
-    flux = torch.tensor([f0, f1, f2], dtype=torch.float32)
+    flux = torch.tensor([f0, f1, f2], dtype=torch.float32, device=device)
     
     return flux
 
 def roe_flux_torch(ql, qr, gamma=1.4):
+    device = ql.device
+
+    gm1 = gamma - 1.
+
     # Primitive variables
     rl = ql[0]
     ul = ql[1]/rl
     El = ql[2]
-    pl = (gamma - 1.) * (El - 0.5*rl*ul**2)
+    pl = gm1 * (El - 0.5*rl*ul**2)
     hl = (El + pl) / rl
 
     rr = qr[0]
     ur = qr[1]/rr
     Er = qr[2]
-    pr = (gamma - 1.) * (Er - 0.5*rr*ur**2)
+    pr = gm1 * (Er - 0.5*rr*ur**2)
     hr = (Er + pr) / rr
 
     # Roe-averages
     R = torch.sqrt(rr/rl)
-    uhat = (ul + R*ur) / (1+R)
-    hhat = (hl + R*hr) / (1+R)
-    chat = torch.sqrt((gamma - 1.)*(hhat - 0.5*uhat**2))
+    u = (ul + R*ur) / (1+R)
+    h = (hl + R*hr) / (1+R)
+    c2 = gm1 * (h - 0.5*u**2)
+    c = torch.sqrt(c2)
 
     # Right Eigenvectors
-    r1 = torch.tensor([1, uhat - chat, hhat - uhat*chat], dtype=torch.float32)
-    r2 = torch.tensor([1, uhat,        0.5*uhat**2],      dtype=torch.float32)
-    r3 = torch.tensor([1, uhat + chat, hhat + uhat*chat], dtype=torch.float32)
+    r1 = torch.tensor([1, u - c, h - u*c], dtype=torch.float32, device=device)
+    r2 = torch.tensor([1, u,     0.5*u**2],dtype=torch.float32, device=device)
+    r3 = torch.tensor([1, u + c, h + u*c], dtype=torch.float32, device=device)
     r = torch.stack((r1, r2, r3))
     
     # Auxiliary variables to compute left eigenvectors l_i (no relation with alpha_i below)
-    alpha = (gamma - 1.) * uhat**2 / (2*chat**2)
-    beta = (gamma - 1.) / (chat**2)
+    alpha = gm1 * u**2 / (2*c**2)
+    beta = gm1 / (c**2)
 
     # Left eigenvectors
-    l1 = torch.tensor([0.5 * (alpha + uhat/chat), -0.5 * (beta*uhat + 1/chat), 0.5 * beta], dtype=torch.float32)
-    l2 = torch.tensor([1-alpha,                   beta*uhat,                   -beta],      dtype=torch.float32)
-    l3 = torch.tensor([0.5 * (alpha - uhat/chat), -0.5 * (beta*uhat - 1/chat), 0.5 * beta], dtype=torch.float32)
+    # l1 = torch.tensor([0.5 * (alpha + uhat/chat), -0.5 * (beta*uhat + 1/chat), 0.5 * beta], dtype=torch.float32, device=device)
+    # l2 = torch.tensor([1-alpha,                   beta*uhat,                   -beta],      dtype=torch.float32, device=device)
+    # l3 = torch.tensor([0.5 * (alpha - uhat/chat), -0.5 * (beta*uhat - 1/chat), 0.5 * beta], dtype=torch.float32, device=device)
 
     # Compute wave coefficients
     dq = qr - ql
-    alpha1 = torch.dot(dq, l1)
-    alpha2 = torch.dot(dq, l2)
-    alpha3 = torch.dot(dq, l3)
-    wave_coefs = torch.tensor([alpha1, alpha2, alpha3], dtype=torch.float32)
+    alpha2 = gm1/c2 * ((h - u**2)*dq[0] + u*dq[1] - dq[2])
+    alpha3 = (dq[1] + (c-u)*dq[0] - c*alpha2) / (2*c)
+    alpha1 = dq[0] - alpha2 - alpha3
+    wave_coefs = torch.tensor([alpha1, alpha2, alpha3], dtype=torch.float32, device=device)
 
     # Wave speeds (eigenvalues)
-    s1 = uhat - chat
-    s2 = uhat
-    s3 = uhat + chat
-    s = torch.tensor([s1, s2, s3], dtype=torch.float32)
+    s1 = u - c
+    s2 = u
+    s3 = u + c
+    s = torch.tensor([s1, s2, s3], dtype=torch.float32, device=device)
 
     fl = flux_func_torch(ql)
     fr = flux_func_torch(qr)
@@ -374,6 +383,8 @@ def roe_flux_torch(ql, qr, gamma=1.4):
     return F, s, wave_coefs, r
 
 def solve_euler_1d_torch(mesh, initial_q, flux_limiter, t_end=0.2, CFL=0.4, gamma=1.4):
+    device = initial_q.device
+
     # # Parameters
     dx = mesh[1] - mesh[0]                 # Cell size
     n_edges = torch.numel(mesh)+1               # Number of edges (including two boundaries)
@@ -383,12 +394,12 @@ def solve_euler_1d_torch(mesh, initial_q, flux_limiter, t_end=0.2, CFL=0.4, gamm
     t = 0
     while t < t_end:
         # Initialize flux residuals and wave speeds
-        residuals = torch.zeros_like(q)
-        wave_speeds = torch.zeros((3, n_edges))
+        residuals = torch.zeros_like(q, device=device)
+        wave_speeds = torch.zeros((3, n_edges), device=device)
 
         # Variables stored for flux limiter (tall matrices instead of fat matrices!!!)
-        alpha_all = torch.zeros((n_edges, 3))     # Coefficients of wave families
-        r_all = torch.zeros((n_edges, 3, 3))      # Wave families
+        alpha_all = torch.zeros((n_edges, 3), device=device)     # Coefficients of wave families
+        r_all = torch.zeros((n_edges, 3, 3), device=device)      # Wave families
 
         # Loop over interior cell interfaces
         for iEdge in range(1, n_edges-1):
@@ -426,7 +437,7 @@ def solve_euler_1d_torch(mesh, initial_q, flux_limiter, t_end=0.2, CFL=0.4, gamm
                     alpha_r = alpha_all[iEdge+1][iWave]
                     rr = r_all[iEdge+1][iWave]
                     theta = torch.dot(alpha_r*rr, r)/torch.dot(r,r) / (alpha + 1e-8)
-                F_correction = 0.5*torch.abs(wave_speed)*(1-dt/dx*torch.abs(wave_speed))*alpha*flux_limiter(torch.tensor([theta], dtype=torch.float32))*r
+                F_correction = 0.5*torch.abs(wave_speed)*(1-dt/dx*torch.abs(wave_speed))*alpha*flux_limiter(torch.tensor([theta], dtype=torch.float32, device=device))*r
                 residuals[:, iL] += F_correction
                 residuals[:, iR] -= F_correction
 
