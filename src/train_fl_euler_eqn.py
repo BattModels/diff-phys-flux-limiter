@@ -1,4 +1,5 @@
 import os
+import time
 import torch
 import torch.nn as nn
 import numpy as np
@@ -6,7 +7,6 @@ import matplotlib.pyplot as plt
 
 from models.model import FluxLimiter
 from utils import fvm_solver, utils
-from data.dataset import load_burgers_1d
 
 from omegaconf import DictConfig, OmegaConf
 import hydra
@@ -106,7 +106,8 @@ def analytic_sod(left_state, right_state, npts=1000, t=0.2, L=1., gamma=1.4):
     
     return x_arr, rho, u, p
 
-def save_checkpoint(model):
+def save_checkpoint(model, device):
+    device = next(model.parameters()).device
     torch.save(model.state_dict(), 'model_euler.pt')
 
     model.eval()
@@ -115,16 +116,17 @@ def save_checkpoint(model):
     n_eval = 1000
     r_eval = np.linspace(r_min, r_max, n_eval)
     with torch.no_grad():
-        preds = model(torch.Tensor(r_eval).view(-1,1))
+        preds = model(torch.Tensor(r_eval).view(-1,1).to(device))
     fig, ax = plt.subplots()
     ax.plot(r_eval, utils.minmod(r_eval), label="minmod")
     ax.plot(r_eval, utils.vanLeer(r_eval), label="van Leer")
     ax.plot(r_eval, utils.superbee(r_eval), label="superbee")
-    ax.plot(r_eval, preds.cpu(), label="neural flux limiter")
+    ax.plot(r_eval, preds.cpu().numpy(), label="neural flux limiter")
     ax.set_xlabel('$r$')
     ax.set_ylabel('$\phi(r)$')
     ax.legend()
     fig.savefig('learned_limiter_euler', dpi=300)
+    plt.close()
 
 gamma = 1.4
 n_cells = 101
@@ -149,7 +151,8 @@ mesh = x
 @hydra.main(version_base="1.3", config_path="../configs", config_name="config_euler")
 def train_neural_flux_limiter(cfg: DictConfig) -> None:
     # Setup device
-    device = cfg.device
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = 'cpu'
 
     # Initiate wandb
     if cfg.wandb.log:
@@ -177,18 +180,18 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
 
     model = model.to(device)
 
-    if cfg.wandb.log:
-        wandb.watch(model, log="all", log_freq=1)
+    # if cfg.wandb.log:
+    #     wandb.watch(model, log="all", log_freq=1)
 
     # Plot the flux limiter before training
     model.eval()
     with torch.no_grad():
-        preds = model(torch.linspace(-2, 10, 1000).view(-1,1))
+        preds = model(torch.linspace(-2, 10, 1000).view(-1,1).to(device))
     fig, ax = plt.subplots()
     ax.plot(np.linspace(0, 10, 1000), utils.minmod(np.linspace(0, 10, 1000)))
     ax.plot(np.linspace(0, 10, 1000), utils.vanLeer(np.linspace(0, 10, 1000)))
     ax.plot(np.linspace(0, 10, 1000), utils.superbee(np.linspace(0, 10, 1000)))
-    ax.plot(np.linspace(-2, 10, 1000), preds.cpu())
+    ax.plot(np.linspace(-2, 10, 1000), preds.cpu().numpy())
     fig.savefig('initial_model_euler', dpi=300)
 
     # Optimizer
@@ -240,15 +243,18 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         # Begin training
         model.train(True)
 
-        x, rho, u, p = fvm_solver.solve_euler_1d_torch(mesh=mesh,
-                                                       initial_q=initial_q,
+        start_time = time.time()
+        x, rho, u, p = fvm_solver.solve_euler_1d_torch(mesh=mesh.to(device),
+                                                       initial_q=initial_q.to(device),
                                                        flux_limiter=model, 
                                                        t_end=t, 
                                                        CFL=0.4,
                                                        gamma=1.4,
                                                        )
-        train_loss = nn.MSELoss()(rho, torch.tensor(rho_a, dtype=torch.float32))
-        print(f"train loss {epoch}: {train_loss.item()}")
+        train_loss = nn.MSELoss()(rho, torch.tensor(rho_a, dtype=torch.float32, device=device))
+        epoch_time = time.time() - start_time
+        print(f"Loss train: {train_loss.item()}")
+        print(f"epoch time: {epoch_time}")
 
         optimizer.zero_grad()
         train_loss.backward()
@@ -258,14 +264,14 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
 
         model.eval()
         with torch.no_grad():
-            x, rho, u, p = fvm_solver.solve_euler_1d_torch(mesh=mesh,
-                                                       initial_q=initial_q,
+            x, rho, u, p = fvm_solver.solve_euler_1d_torch(mesh=mesh.to(device),
+                                                       initial_q=initial_q.to(device),
                                                        flux_limiter=model, 
                                                        t_end=0.2, 
                                                        CFL=0.4,
                                                        gamma=1.4,
                                                        )
-            valid_loss = nn.MSELoss()(rho, torch.tensor(rho_a_valid, dtype=torch.float32))
+            valid_loss = nn.MSELoss()(rho, torch.tensor(rho_a_valid, dtype=torch.float32, device=device))
             print(f"valid loss {epoch}: {valid_loss.item()}")
 
         scheduler.step()
@@ -278,7 +284,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                         })
 
         if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs - 1):
-            save_checkpoint(model)
+            save_checkpoint(model, device)
 
     if cfg.wandb.log:
         wandb.finish()
