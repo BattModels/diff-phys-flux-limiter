@@ -125,7 +125,7 @@ def save_checkpoint(model, device):
     ax.set_xlabel('$r$')
     ax.set_ylabel('$\phi(r)$')
     ax.legend()
-    fig.savefig('learned_limiter_euler', dpi=300)
+    fig.savefig('learned_limiter_euler_multi', dpi=300)
     plt.close()
 
 def calc_conserved_quantities(left_state, right_state, x_ini, x_fin, n_cells, gamma=1.4):
