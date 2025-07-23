@@ -36,7 +36,7 @@ flux_limiters = {
 }
 
 # Load data
-path = '~/scratch/flux_limiter/data/'
+path = '~/research/flux_limiter/data/'
 path = os.path.expanduser(path)
 flnm = '1D_Burgers_Sols_Nu0.001.hdf5'
 path = os.path.join(path, flnm)
@@ -53,7 +53,7 @@ train_loader, test_loader = load_burgers_1d(
 model.eval()
 with torch.no_grad():
     for (name, flux_limiter) in flux_limiters.items():
-        mse = 0.0
+        mse_list = []
         for ibatch, sample in enumerate(test_loader):
             # Solve for the state at the end of time T
             u = fvm_solver.solve_burgers_1D_torch(
@@ -63,13 +63,15 @@ with torch.no_grad():
                 CFL=0.4,
                 model=flux_limiter)
             loss = torch.nn.MSELoss()(u, sample['y'].to(device))
-            mse += loss.item()
+            mse_list.append(loss.detach().cpu())
 
-        mse = mse/(ibatch+1)
-        print(f"{name}: {mse}")
+        mse_list = torch.stack(mse_list)
+        mse_mean = mse_list.mean().item()
+        mse_std = mse_list.std(unbiased=True).item()
+        print(f"{name}:\nmse_mean: {mse_mean}, mse_std: {mse_std}")
 
 # Test pw limiter
-mse = 0.0
+mse_list = []
 for ibatch, sample in enumerate(test_loader):
     u = fvm_solver.solve_burgers_1D(
         u0=sample['x'][0].numpy(),
@@ -77,5 +79,9 @@ for ibatch, sample in enumerate(test_loader):
         dx=1/(1024/8),
         CFL=0.4,
         flux_limiter=utils.piecewise_linear_limiter)
-    mse += np.sum((u - sample['y'][0].numpy())**2)/u.size
-print(mse/(ibatch+1))
+    loss = np.sum((u - sample['y'][0].numpy())**2)/u.size
+    mse_list.append(loss)
+
+mse_mean = np.mean(mse_list)
+mse_std  = np.std(mse_list, ddof=1)  
+print(f"piecewise:\nmse_mean: {mse_mean}, mse_std: {mse_std}")
