@@ -87,9 +87,6 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
 
     model = model.to(device)
 
-    # if cfg.wandb.log:
-        # wandb.watch(model, log="all", log_freq=1)
-
     # Plot the flux limiter before training
     model.eval()
     with torch.no_grad():
@@ -154,24 +151,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 CFL=cfg.data.CFL,
                 model=model)
 
-            # loss = nn.MSELoss()(u, sample['y'].to(device))
-
-            # data loss plus TVD loss
-            loss = nn.L1Loss()(u, sample['y'].to(device))
-            print(f"train batch loss {ibatch}: {loss.item()}")
-            # tvd_loss = nn.L1Loss()(u, torch.roll(u, 1, dims=2))
-            tvd_loss = torch.abs(nn.L1Loss()(u, torch.roll(u, 1, dims=2)) - nn.L1Loss()(sample['y'].to(device), torch.roll(sample['y'].to(device), 1, dims=2)))
-            print(f"train batch tvd loss {ibatch}: {tvd_loss.item()}")
-            loss = loss + 10*tvd_loss
-            
-            # loss = torch.mean(
-            #         torch.stack(
-            #             [
-            #                 nn.L1Loss()(u[i], sample['y'][i].to(device)) / nn.L1Loss()(sample['y'][i].to(device), torch.zeros_like(sample['y'][i]).to(device)) for i in range(len(sample['y']))
-            #             ]
-            #         )
-            #     )
-
+            loss = nn.MSELoss()(u, sample['y'].to(device))
             # print(f"train batch loss {ibatch}: {loss.item()}")
 
             optimizer.zero_grad()
@@ -202,43 +182,16 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                     model=model)
                 
                 loss = nn.MSELoss()(u, sample['y'].to(device))
-                # loss = torch.mean(
-                #     torch.stack(
-                #         [
-                #             nn.L1Loss()(u[i], sample['y'][i].to(device)) / nn.L1Loss()(sample['y'][i].to(device), torch.zeros_like(sample['y'][i]).to(device)) for i in range(len(sample['y']))
-                #         ]
-                #     )
-                # )
-
-                # print(f"valid batch loss {ibatch}: {loss.item()}")
-
                 total_valid_loss += loss.item()
 
             total_valid_loss = total_valid_loss/(ibatch+1)
             print(f"Loss valid: {total_valid_loss}")
-
-            # The second validation dataset
-            u0 = torch.zeros(5,128)
-            for i in range(5):
-                _, ini_state = utils.ramp(i+1,N=128)
-                u0[i] = torch.Tensor(ini_state)
-
-            u = fvm_solver.solve_linear_advection_1D_torch(
-                u0=u0.to(device),
-                T=5,
-                a=cfg.data.velocity,
-                dx=1./128,
-                CFL=cfg.data.CFL,
-                model=model)
-            total_valid_loss_2 = nn.MSELoss()(u[:,-1,:], u0.to(device)).item()
-            print(f"Loss valid 2: {total_valid_loss_2}")
             
         scheduler.step(total_valid_loss)
 
         if cfg.wandb.log:
             wandb.log({"train loss": total_train_loss,
                         "valid loss": total_valid_loss,
-                        "valid loss 2": total_valid_loss_2,
                         "learning rate": scheduler.optimizer.param_groups[0]['lr']})
 
         if (epoch % cfg.opt.n_checkpoint == 0 or epoch == cfg.opt.n_epochs - 1):
