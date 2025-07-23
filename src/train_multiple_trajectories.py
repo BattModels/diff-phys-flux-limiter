@@ -15,6 +15,12 @@ import hydra
 import wandb
 
 torch.manual_seed(3407)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(3407)
+    torch.cuda.manual_seed_all(3407)
+
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 def save_checkpoint(model, device):
     torch.save(model.state_dict(), 'model_linear.pt')
@@ -148,7 +154,16 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
                 CFL=cfg.data.CFL,
                 model=model)
 
-            loss = nn.MSELoss()(u, sample['y'].to(device))
+            # loss = nn.MSELoss()(u, sample['y'].to(device))
+
+            # data loss plus TVD loss
+            loss = nn.L1Loss()(u, sample['y'].to(device))
+            print(f"train batch loss {ibatch}: {loss.item()}")
+            # tvd_loss = nn.L1Loss()(u, torch.roll(u, 1, dims=2))
+            tvd_loss = torch.abs(nn.L1Loss()(u, torch.roll(u, 1, dims=2)) - nn.L1Loss()(sample['y'].to(device), torch.roll(sample['y'].to(device), 1, dims=2)))
+            print(f"train batch tvd loss {ibatch}: {tvd_loss.item()}")
+            loss = loss + 10*tvd_loss
+            
             # loss = torch.mean(
             #         torch.stack(
             #             [
