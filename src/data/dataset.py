@@ -2,13 +2,16 @@ import os
 import torch
 import numpy as np
 import h5py
-torch.manual_seed(3407)
+# torch.manual_seed(3407)
 
 def load_linear_adv_1d(path, n_train, n_test, train_batch_size, test_batch_size):
     data = torch.load(path).float()
 
     # Shuffle the whole dataset
-    perm = torch.randperm(data.shape[0])
+    # Use local RNG context to make sure the split of train and test set is the same
+    # with torch.random.fork_rng():
+    #     torch.manual_seed(3407)
+    perm = torch.load("data/perm.pt")
 
     x_train = data[perm[0:n_train],0,:]
     y_train = data[perm[0:n_train],1:,:]

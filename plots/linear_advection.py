@@ -59,7 +59,7 @@ flux_limiters = {
     "van Leer": utils.vanLeer,
     "Koren": utils.koren,
     "MC": utils.MC,
-    "NN": neural_flux_limiter,
+    "DPFL": neural_flux_limiter,
     # "Piecewise linear": utils.piecewise_linear_limiter,
 }
 

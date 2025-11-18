@@ -14,10 +14,11 @@ import hydra
 
 import wandb
 
-torch.manual_seed(3407)
+seed = 3407
+torch.manual_seed(seed)
 if torch.cuda.is_available():
-    torch.cuda.manual_seed(3407)
-    torch.cuda.manual_seed_all(3407)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False

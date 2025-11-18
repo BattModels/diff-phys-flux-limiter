@@ -170,7 +170,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     # Model
-    model = SymmetricFluxLimiter(
+    model = FluxLimiter(
         cfg.net.n_input,
         cfg.net.n_output,
         cfg.net.n_hidden,
@@ -281,14 +281,16 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         train_loss /= i + 1
         epoch_time = time.time() - start_time
         print(f"Loss train: {train_loss.item()}")
-        print(f"epoch time: {epoch_time}")
-
+        
         optimizer.zero_grad()
         train_loss.backward()
         # if cfg.opt.grad_clipping:
         #     nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1, error_if_nonfinite=True)
         optimizer.step()
 
+        print(f"epoch time: {epoch_time}")
+
+        # Begin validation
         model.eval()
         with torch.no_grad():
             x, rho, u, p = fvm_solver.solve_euler_1d_torch(mesh=mesh.to(device),
