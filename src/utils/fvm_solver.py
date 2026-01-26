@@ -147,7 +147,7 @@ def solve_linear_advection_1D(u0, T, a, dx, CFL, flux_limiter):
     """
 
     dt = CFL * dx / a
-    n_timesteps = int(T/dt)
+    n_timesteps = int(np.ceil(T/dt))
 
     u_all = np.zeros((n_timesteps+1, u0.shape[0]))
     u_all[0] = u0.copy()
