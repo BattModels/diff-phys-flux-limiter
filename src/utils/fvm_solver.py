@@ -263,6 +263,7 @@ def construct_char_eqn(x, t):
     return char_eqn
 
 def solve_burgers_1D_exactly(Nx=1000, T_end=1., dt=1e-3):
+    # Solve the 1D Burgers' equation with initial condition u(x,0) = sin(2*pi*x)
     # Only compute the solution of the first half of the interval [0, 1] because of symmetry
     L_half = 1./2
     Nx_half = int(Nx/2)
