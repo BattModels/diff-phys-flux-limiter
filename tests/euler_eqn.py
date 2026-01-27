@@ -282,8 +282,8 @@ def main(config_name, n_cells):
     device = 'cpu'
 
     # Load Model
-    model = FluxLimiter(1,1,64,5,act="Tanh") #
-    model.load_state_dict(torch.load("model.pt"))
+    model = FluxLimiter(1,1,64,5,act="relu") #
+    model.load_state_dict(torch.load("model_linear_relu.pt", map_location=device))
     model = model.to(device)
 
     def neural_flux_limiter_linear(r):
@@ -292,8 +292,8 @@ def main(config_name, n_cells):
             phi = model(torch.Tensor([r]).view(-1, 1).to(device))
         return phi.numpy().squeeze()
     
-    model_euler = FluxLimiter(1,1,64,5,act="Tanh") #
-    model_euler.load_state_dict(torch.load("model_euler_best.pt"))
+    model_euler = FluxLimiter(1,1,64,5,act="tanh") #
+    model_euler.load_state_dict(torch.load("model_euler_best.pt", map_location=device))
     model_euler = model_euler.to(device)
     
     def neural_flux_limiter_euler(r):
@@ -309,12 +309,13 @@ def main(config_name, n_cells):
         "Superbee": utils.superbee,
         "Van Leer": utils.vanLeer,
         "Koren": utils.koren,
+        "MC": utils.MC,
         "Neural network (linear)": neural_flux_limiter_linear,
         "Neural network (euler)": neural_flux_limiter_euler,
         # "Piecewise linear": utils.piecewise_linear_limiter,
     }
-    markers = ['s', 'x', '+', 'o', '^', '*', 'p']
-    colors = ['pink', 'brown', 'red', 'purple', 'green', 'orange', 'cyan']
+    markers = ['s', 'x', '+', 'o', '^', '.', '*', 'p']
+    colors = ['pink', 'brown', 'red', 'purple', 'green', 'blue', 'orange', 'cyan']
 
     if config_name == 'Sod':
         t = 0.2
@@ -377,8 +378,9 @@ def main(config_name, n_cells):
     axes[2].legend()
     
     fig.set_size_inches(30,10)
-    fig.savefig(config_name, dpi=300)
+    # fig.savefig(config_name, dpi=300)
 
 if __name__ == "__main__":
-    main(config_name='Shu-Osher', n_cells=101)
+    # main(config_name='Shu-Osher', n_cells=101)
+    main(config_name='Sod', n_cells=101)
 

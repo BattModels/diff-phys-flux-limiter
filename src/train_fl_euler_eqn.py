@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 
-from models.model import FluxLimiter
+from models.model import FluxLimiter, SymmetricFluxLimiter
 from utils import fvm_solver, utils
 
 from omegaconf import DictConfig, OmegaConf
