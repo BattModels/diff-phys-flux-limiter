@@ -279,7 +279,6 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
             print(f"loss {i}: {loss.item()}")
             train_loss += loss
         train_loss /= i + 1
-        epoch_time = time.time() - start_time
         print(f"Loss train: {train_loss.item()}")
         
         optimizer.zero_grad()
@@ -287,7 +286,7 @@ def train_neural_flux_limiter(cfg: DictConfig) -> None:
         # if cfg.opt.grad_clipping:
         #     nn.utils.clip_grad_norm_(model.parameters(), max_norm=0.1, error_if_nonfinite=True)
         optimizer.step()
-
+        epoch_time = time.time() - start_time
         print(f"epoch time: {epoch_time}")
 
         # Begin validation
