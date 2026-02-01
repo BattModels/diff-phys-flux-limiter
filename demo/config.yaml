@@ -1,0 +1,43 @@
+# Network
+net:
+  n_input: 1
+  n_output: 1
+  n_hidden: 64
+  n_layers: 5
+  
+  activation: "relu"
+
+# Optimizer
+opt:
+  n_epochs: 30
+  lr: 1e-3
+  weight_decay: 0.0
+
+  n_checkpoint: 1
+
+data:
+  folder: 'drive/My Drive/Colab Notebooks/flux_limiter/'
+  filename: '1D_linear_adv_beta1.0_8xCG.npy'
+  batch_size: 128
+  n_train: 1280
+  test_batch_size: 64
+  n_val: 256
+
+  spatial_length: 1024
+  temporal_length: 321
+  CG: 8
+
+  xL: 0.
+  xR: 1.
+  dt: 3.90625e-4
+  n_timesteps: 40
+  t_end: 0.125
+  velocity: 1.
+  CFL: 0.4
+
+wandb:
+  log: True
+
+
+
+
