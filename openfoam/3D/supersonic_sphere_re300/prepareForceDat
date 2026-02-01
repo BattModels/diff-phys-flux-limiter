@@ -1,0 +1,3 @@
+cp postProcessing/forces1/0/force.dat postProcessing/
+sed -i 's/)//g' postProcessing/force.dat
+sed -i 's/(//g' postProcessing/force.dat

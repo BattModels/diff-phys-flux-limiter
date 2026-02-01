@@ -1,0 +1,245 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2.0.0                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Which of the steps to run
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+
+geometry
+{
+
+    sphere
+    {
+        type searchableSphere;
+        centre  (0 0 0);
+        radius  1.0;
+    }
+    
+    sphereRef1
+    {
+        type searchableSphere;
+        centre  (0 0 0);
+        radius  20.0;
+    }
+    
+    sphereRef2
+    {
+        type searchableSphere;
+        centre  (0 0 0);
+        radius  10.0;
+    }
+    
+    
+    sphereRef3
+    {
+        type searchableSphere;
+        centre  (0 0 0);
+        radius  7.0;
+    }
+    
+    sphereRef4
+    {
+        type searchableSphere;
+        centre  (0 0 0);
+        radius  5.;
+    }
+    
+    sphereRef5
+    {
+        type searchableSphere;
+        centre  (0 0 0);
+        radius  2.5;
+    }
+    
+    
+    
+};
+
+castellatedMeshControls
+{
+    maxLocalCells 1000000;
+    maxGlobalCells 2000000;
+    minRefinementCells 0;
+    maxLoadUnbalance 0.10;
+    nCellsBetweenLevels 1;
+    features
+    (
+    );
+    
+    refinementSurfaces
+    {
+        sphere
+        {
+            // Surface-wise min and max refinement level
+            level (5 5);
+        }
+        
+    }
+
+    resolveFeatureAngle 30;
+    locationInMesh (1.5 0 0);
+    allowFreeStandingZoneFaces no;
+
+    refinementRegions
+    {
+
+        sphereRef1
+        {
+            mode inside;
+            levels ((1e15 1));
+        }
+        
+        sphereRef2
+        {
+            mode inside;
+            levels ((1e15 2));
+        }
+        
+        sphereRef3
+        {
+            mode inside;
+            levels ((1e15 3));
+        }
+        
+        sphereRef4
+        {
+            mode inside;
+            levels ((1e15 4));
+        }
+        
+        sphereRef5
+        {
+            mode inside;
+            levels ((1e15 6));
+        }
+        
+        
+    }
+}
+
+
+snapControls
+{
+    nSmoothPatch 3;
+    tolerance 1.0;
+    nSolveIter 30;
+    nRelaxIter 5;
+}
+
+addLayersControls
+{
+    relativeSizes true;
+    layers
+    {
+        sphere
+        {
+            nSurfaceLayers 5;
+
+        }
+
+    }
+
+    // Expansion factor for layer mesh
+    expansionRatio 1.3;
+
+    // Wanted thickness of final added cell layer. If multiple layers
+    // is the thickness of the layer furthest away from the wall.
+    // Relative to undistorted size of cell outside layer.
+    // See relativeSizes parameter.
+    finalLayerThickness 0.3;
+
+    // Minimum thickness of cell layer. If for any reason layer
+    // cannot be above minThickness do not add layer.
+    // Relative to undistorted size of cell outside layer.
+    // See relativeSizes parameter.
+    minThickness 0.001;
+
+    // If points get not extruded do nGrow layers of connected faces that are
+    // also not grown. This helps convergence of the layer addition process
+    // close to features.
+    // Note: changed(corrected) w.r.t 1.7.x! (didn't do anything in 1.7.x)
+    nGrow 0;
+
+    // Advanced settings
+
+    // When not to extrude surface. 0 is flat surface, 90 is when two faces
+    // are perpendicular
+    featureAngle 60;
+
+    // Maximum number of snapping relaxation iterations. Should stop
+    // before upon reaching a correct mesh.
+    nRelaxIter 5;
+
+    // Number of smoothing iterations of surface normals
+    nSmoothSurfaceNormals 1;
+
+    // Number of smoothing iterations of interior mesh movement direction
+    nSmoothNormals 3;
+
+    // Smooth layer thickness over surface patches
+    nSmoothThickness 10;
+
+    // Stop layer growth on highly warped cells
+    maxFaceThicknessRatio 0.5;
+
+    // Reduce layer growth where ratio thickness to medial
+    // distance is large
+    maxThicknessToMedialRatio 0.3;
+
+    // Angle used to pick up medial axis points
+    // Note: changed(corrected) w.r.t 16x! 90 degrees corresponds to 130 in 16x.
+    minMedialAxisAngle 90;
+
+    // Create buffer region for new layer terminations
+    nBufferCellsNoExtrude 0;
+
+
+    // Overall max number of layer addition iterations. The mesher will exit
+    // if it reaches this number of iterations; possibly with an illegal
+    // mesh.
+    nLayerIter 50;
+}
+
+meshQualityControls
+{
+    maxNonOrtho 65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave 80;
+    minVol 1e-200;
+    minTetQuality 1e-9;
+    minArea -1;
+    minTwist 0.05;
+    minDeterminant 0.001;
+    minFaceWeight 0.05;
+    minVolRatio 0.01;
+    minTriangleTwist -1;
+
+    nSmoothScale 4;
+    errorReduction 0.75;
+
+    relaxed
+    {
+        maxNonOrtho 75;
+    }
+}
+
+debug 0;
+mergeTolerance 1e-6;
+
+// ************************************************************************* //
