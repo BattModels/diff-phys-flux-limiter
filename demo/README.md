@@ -1,0 +1,1 @@
+The training data for linear advection of 8x CG used in this Jupyter notebook can be found at: https://drive.google.com/file/d/1N4ycXfJazt4hcT5-iGC1kBnLVluu-m_d/view?usp=sharing.
