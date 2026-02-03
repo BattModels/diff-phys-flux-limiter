@@ -23,4 +23,67 @@ This repo contains training and testing scripts, data, demos, plotting utilities
 - `model_linear_relu.pt` – the final learned flux limiter model from the paper
 - `fl_linear_adv_relu.gif` – Evolution of the learned flux limiter with training epoch
 
-## Requirements
+## Installation
+1. Clone the repository:
+```bash
+git clone https://github.com/BattModels/diff-phys-flux-limiter.git
+```
+
+2. Create and activate a virtual environment, then install dependencies:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+3. (Optional) Install OpenFOAM and set up the environment for OpenFOAM integration.
+The implementation has been tested with OpenFOAM-12 and OpenFOAM-v2012.
+
+## Traing a flux limiter (take 1D linear advection as an example)
+To train a flux limiter on 1D linear advection, run the following command:
+```bash
+python src/train_fl_linear_adv.py
+```
+or you want to use a specific configuration file:
+```bash
+python src/train_fl_linear_adv.py --config-path configs/ --config-name config.yaml
+```
+This will save the trained model and training logs in the `outputs/` directory.
+
+## Use DPFL in OpenFOAM (take OpenFOAM-12 as an example)
+### 1. Activate your OpenFOAM environment
+```
+# Example (adjust to your installation)
+source /opt/openfoam/OpenFOAM-12/etc/bashrc
+```
+### 2. Compile the limiter
+Navigate to the `openfoam/Neural` directory and compile the limiter:
+```bash
+cd openfoam/Neural
+wmake
+```
+This will produce a shared library named something like: `libNeural.so` in path prescribed in `openfoam/Neural/Make/files`. One can set the path to the user lib path `$FOAM_USER_LIBBIN` or put the compiled library anywhere, just include the path in `controlDict` for your own case.
+
+### 3. Choose Neural or NeuralV limiter in OpenFOAM case
+In your OpenFOAM case, edit the `system/fvSchemes` file to use the limiter. For example, to use the `Neural` limiter for velocity field:
+```
+divSchemes
+{
+    default         Gauss linear;
+    div(phi,U)      Gauss NeuralV; // for velocity field
+}
+```
+‘V’-schemes are specialised versions of schemes designed for vector fields. They differ from conventional schemes by calculating a single limiter which is applied to all components of the vectors, rather than calculating separate limiters for each component of the vector. If you want to use the component-wise limiter, just change `NeuralV` to `Neural`.
+
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@article{huang2025learning,
+  title={Learning second-order TVD flux limiters using differentiable solvers},
+  author={Huang, Chenyang and Sebastian, Amal S and Viswanathan, Venkatasubramanian},
+  journal={arXiv preprint arXiv:2503.09625},
+  year={2025}
+}
+```
