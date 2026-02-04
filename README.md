@@ -31,7 +31,9 @@ This repo contains training and testing scripts, data, demos, plotting utilities
 - `src/` – main Python source code (models, solvers, training loops, utilities)
 - `tests/` – multiple test cases
 - `model_linear_relu.pt` – the final learned flux limiter model from the paper
-- `fl_linear_adv_relu.gif` – Evolution of the learned flux limiter with training epoch
+- `model_linear_relu_weights.txt` – weights of the learned flux limiter model
+- `dpfl_linear_adv_relu.gif` – Evolution of the learned flux limiter with training epoch
+- `requirements.txt` – Python dependencies
 
 ## Installation
 1. Clone the repository:
@@ -48,8 +50,8 @@ pip install -r requirements.txt
 3. (Optional) Install OpenFOAM and set up the environment for OpenFOAM integration.
 The implementation has been tested with OpenFOAM-12 and OpenFOAM-v2012.
 
-## Traing a flux limiter (take 1D linear advection as an example)
-To train a flux limiter on 1D linear advection, run the following command:
+## Train a flux limiter
+Take 1D linear advection as an example, run the following command:
 ```bash
 python src/train_fl_linear_adv.py
 ```
@@ -57,9 +59,10 @@ or you want to use a specific configuration file:
 ```bash
 python src/train_fl_linear_adv.py --config-path configs/ --config-name config.yaml
 ```
-This will save the trained model and training logs in the `outputs/` directory.
+This will save the trained model and upload the training logs to wandb.
 
-## Use DPFL in OpenFOAM (take OpenFOAM-12 as an example)
+## Use DPFL in OpenFOAM
+Take OpenFOAM-12 as an example, follow the steps below to compile and use the learned flux limiter in OpenFOAM simulations.
 ### 1. Activate your OpenFOAM environment
 ```
 # Example (adjust to your installation)
