@@ -1,13 +1,11 @@
 # Learning second-order TVD flux limiters using differentiable solvers 
 
-[**arXiv preprint**](https://doi.org/10.48550/arXiv.2503.09625)
+[[**Paper**]](https://doi.org/10.1063/5.0311710)
+[[**arXiv**]](https://doi.org/10.48550/arXiv.2503.09625)
 
 **Chenyang Huang**, **Amal S. Sebastian**, **Venkatasubramanian Viswanathan**
 
- 
-
-
----
+ ---
 
 ## Overview
 
