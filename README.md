@@ -91,10 +91,13 @@ divSchemes
 If you use this code in your research, please cite:
 
 ```bibtex
-@article{huang2025learning,
-  title={Learning second-order TVD flux limiters using differentiable solvers},
+@article{huang2026learning,
+  title={Learning second-order total variation diminishing flux limiters using differentiable solvers},
   author={Huang, Chenyang and Sebastian, Amal S and Viswanathan, Venkatasubramanian},
-  journal={arXiv preprint arXiv:2503.09625},
-  year={2025}
+  journal={Physics of Fluids},
+  volume={38},
+  number={3},
+  year={2026},
+  publisher={AIP Publishing}
 }
 ```
